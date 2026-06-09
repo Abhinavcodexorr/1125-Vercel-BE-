@@ -1,0 +1,230 @@
+const {
+    getAllRoomBlockingBookings,
+    getOccupiedDateKeysForRange,
+    getRoomBlockedDateData,
+    getStayQuantityStatus,
+    getRoomQuantity,
+    computeNights,
+    toDateOnly
+} = require('./roomAvailabilityHelper');
+
+const CURRENCY_SYMBOLS = {
+    GHS: 'GH₵',
+    USD: '$',
+    EUR: '€',
+    GBP: '£'
+};
+
+const parsePositiveInt = (value, fallback) => {
+    const num = parseInt(value, 10);
+    return Number.isFinite(num) && num > 0 ? num : fallback;
+};
+
+const parseStayQuery = (query) => {
+    const checkInDate = query.checkInDate || query.checkinDate || null;
+    const checkOutDate = query.checkOutDate || query.checkoutDate || null;
+    const adults = parsePositiveInt(query.adult ?? query.adults, null);
+    const children = parsePositiveInt(query.children ?? query.child, 0);
+
+    let checkIn = null;
+    let checkOut = null;
+
+    if (checkInDate) checkIn = toDateOnly(checkInDate);
+    if (checkOutDate) checkOut = toDateOnly(checkOutDate);
+
+    const hasStayDates = !!(checkIn && checkOut);
+    const validStayDates = hasStayDates && checkOut > checkIn;
+
+    return {
+        checkInDate: checkIn,
+        checkOutDate: checkOut,
+        adults,
+        children,
+        hasStayDates,
+        validStayDates,
+        page: parsePositiveInt(query.page, 1),
+        limit: Math.min(parsePositiveInt(query.limit, 10), 50)
+    };
+};
+
+const formatPrice = (price, currency = 'GHS') => {
+    const symbol = CURRENCY_SYMBOLS[currency] || currency;
+    const amount = Number(price) || 0;
+    return `${symbol} ${amount.toFixed(2)}/night`;
+};
+
+const expandBlockedDatesPalmStyle = (blockedRanges = []) => {
+    const expanded = [];
+    let blockId = 0;
+
+    blockedRanges.forEach((block) => {
+        const occupiedDates = getOccupiedDateKeysForRange(block.startDate, block.endDate);
+        occupiedDates.forEach((dateKey) => {
+            const dayStart = new Date(`${dateKey}T00:00:00.000Z`);
+            const dayEnd = new Date(`${dateKey}T23:59:59.999Z`);
+            expanded.push({
+                blockId,
+                _id: block._id,
+                startDate: dayStart.toISOString(),
+                endDate: dayEnd.toISOString(),
+                date: dayStart.toISOString(),
+                isSingleDate: true,
+                reason: block.reason || 'Blocked by admin',
+                duration: computeNights(block.startDate, block.endDate) || 1
+            });
+            blockId += 1;
+        });
+    });
+
+    return expanded;
+};
+
+const bookingConflictsStay = (bookings, checkIn, checkOut) => {
+    const requestCheckIn = toDateOnly(checkIn);
+    const requestCheckOut = toDateOnly(checkOut);
+    if (!requestCheckIn || !requestCheckOut) return null;
+
+    return (
+        bookings.find((booking) => {
+            const bookingCheckIn = toDateOnly(booking.checkInDate);
+            const bookingCheckOut = toDateOnly(booking.checkOutDate);
+            return requestCheckIn < bookingCheckOut && requestCheckOut > bookingCheckIn;
+        }) || null
+    );
+};
+
+const evaluateRoomStay = (room, bookings, stay) => {
+    const quantity = getRoomQuantity(room);
+    const blockedDatesExpanded = expandBlockedDatesPalmStyle(
+        getRoomBlockedDateData(room.blockedDates || []).blocked
+    );
+
+    const result = {
+        isAvailable: true,
+        quantity,
+        availableUnits: quantity,
+        bookedUnits: 0,
+        blockedDates: blockedDatesExpanded,
+        unavailableReason: null,
+        nights: 0,
+        subTotal: 0
+    };
+
+    if (!stay.hasStayDates) {
+        return result;
+    }
+
+    if (!stay.validStayDates) {
+        return {
+            ...result,
+            isAvailable: false,
+            unavailableReason: 'Invalid check-in or check-out dates'
+        };
+    }
+
+    result.nights = computeNights(stay.checkInDate, stay.checkOutDate);
+    result.subTotal = (Number(room.price) || 0) * result.nights;
+
+    const totalGuests = (stay.adults || 0) + (stay.children || 0);
+    if (stay.adults && room.guests < stay.adults) {
+        return {
+            ...result,
+            isAvailable: false,
+            unavailableReason: `Room max capacity is ${room.guests} guests`
+        };
+    }
+    if (totalGuests > 0 && room.guests < totalGuests) {
+        return {
+            ...result,
+            isAvailable: false,
+            unavailableReason: `Room max capacity is ${room.guests} guests`
+        };
+    }
+
+    const quantityStatus = getStayQuantityStatus(
+        room,
+        bookings,
+        stay.checkInDate,
+        stay.checkOutDate
+    );
+    result.quantity = quantityStatus.quantity;
+    result.availableUnits = quantityStatus.availableUnits;
+    result.bookedUnits = quantityStatus.bookedUnits;
+
+    if (!quantityStatus.available) {
+        const bookingConflict = bookingConflictsStay(bookings, stay.checkInDate, stay.checkOutDate);
+        return {
+            ...result,
+            isAvailable: false,
+            unavailableReason: quantityStatus.reason,
+            conflictingBooking: bookingConflict
+                ? {
+                      bookingReference: bookingConflict.bookingReference,
+                      checkInDate: bookingConflict.checkInDate,
+                      checkOutDate: bookingConflict.checkOutDate
+                  }
+                : null
+        };
+    }
+
+    return result;
+};
+
+const shapeRoomForWebsite = (room, bookings, stay) => {
+    const currency = room.currency || 'GHS';
+    const stayEval = evaluateRoomStay(room, bookings, stay);
+
+    return {
+        _id: room._id,
+        name: room.title,
+        title: room.type,
+        slug: room.slug,
+        description: room.description || '',
+        size: room.size,
+        unit: room.unit || 'sq ft',
+        pricePerNight: room.price,
+        price: room.price,
+        currency,
+        currencySymbol: CURRENCY_SYMBOLS[currency] || currency,
+        formattedPrice: formatPrice(room.price, currency),
+        guests: room.guests,
+        quantity: getRoomQuantity(room),
+        adultCapacity: room.guests,
+        childCapacity: 0,
+        amenities: room.amenities || [],
+        images: (room.images || []).map((img, index) => ({
+            _id: img._id,
+            url: img.url,
+            alt: room.title,
+            order: img.order ?? index
+        })),
+        isActive: room.isActive,
+        isDeleted: room.isDeleted,
+        availability: {
+            isAvailable: stayEval.isAvailable,
+            quantity: stayEval.quantity,
+            availableUnits: stayEval.availableUnits,
+            bookedUnits: stayEval.bookedUnits,
+            nights: stayEval.nights,
+            subTotal: stayEval.subTotal,
+            unavailableReason: stayEval.unavailableReason,
+            conflictingBooking: stayEval.conflictingBooking || null,
+            blockedDates: stayEval.blockedDates
+        }
+    };
+};
+
+const filterRoomsForStay = (rooms, stay) => {
+    if (!stay.adults) return rooms;
+    return rooms.filter((room) => room.guests >= stay.adults);
+};
+
+module.exports = {
+    parseStayQuery,
+    formatPrice,
+    evaluateRoomStay,
+    shapeRoomForWebsite,
+    filterRoomsForStay,
+    getAllRoomBlockingBookings,
+    CURRENCY_SYMBOLS
+};
