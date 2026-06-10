@@ -371,7 +371,7 @@ const getRoomsForWebsite = async (req, res) => {
                       checkInDate: { $exists: true, $ne: null },
                       checkOutDate: { $exists: true, $ne: null }
                   })
-                  .select('roomId bookingReference checkInDate checkOutDate status paymentStatus')
+                  .select('roomId roomQuantity bookingReference checkInDate checkOutDate status paymentStatus')
                   .lean()
             : [];
 
@@ -388,6 +388,11 @@ const getRoomsForWebsite = async (req, res) => {
 
         if (stay.hasStayDates && stay.validStayDates) {
             shaped = shaped.filter((room) => room.availability.isAvailable);
+            if (stay.requestedQuantity) {
+                shaped = shaped.filter(
+                    (room) => room.availability.availableUnits >= stay.requestedQuantity
+                );
+            }
         }
 
         const totalItems = shaped.length;
@@ -466,6 +471,7 @@ const checkRoomStayAvailability = async (req, res) => {
             children: stay.children,
             nights: stayEval.nights,
             quantity: stayEval.quantity,
+            requestedQuantity: stay.requestedQuantity || stayEval.requestedQuantity || 1,
             availableUnits: stayEval.availableUnits,
             bookedUnits: stayEval.bookedUnits,
             pricePerNight: room.price,

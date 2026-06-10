@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bookingController = require('./bookingController');
+const roomBookingController = require('./roomBookingController');
 const { isSuperSub } = require('../../middleware/authJWT');
 
 const denySubAdminForWrite = (req, res, next) => {
@@ -12,6 +13,11 @@ const denySubAdminForWrite = (req, res, next) => {
     }
     next();
 };
+
+router.post('/room', roomBookingController.createRoomBooking);
+router.post('/hubtel/callback', roomBookingController.handleHubtelCallback);
+router.get('/confirm', roomBookingController.confirmHubtelBooking);
+router.get('/reference/:reference', roomBookingController.getBookingByReference);
 
 router.get('/dashboard', bookingController.getDashboard);
 router.get('/calendar', bookingController.getCalendarBookings);

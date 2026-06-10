@@ -25,6 +25,7 @@ const parseStayQuery = (query) => {
     const checkOutDate = query.checkOutDate || query.checkoutDate || null;
     const adults = parsePositiveInt(query.adult ?? query.adults, null);
     const children = parsePositiveInt(query.children ?? query.child, 0);
+    const requestedQuantity = parsePositiveInt(query.quantity ?? query.qty ?? query.units, null);
 
     let checkIn = null;
     let checkOut = null;
@@ -40,6 +41,7 @@ const parseStayQuery = (query) => {
         checkOutDate: checkOut,
         adults,
         children,
+        requestedQuantity,
         hasStayDates,
         validStayDates,
         page: parsePositiveInt(query.page, 1),
@@ -99,11 +101,14 @@ const evaluateRoomStay = (room, bookings, stay) => {
         getRoomBlockedDateData(room.blockedDates || []).blocked
     );
 
+    const requestedQuantity = stay.requestedQuantity || 1;
+
     const result = {
         isAvailable: true,
         quantity,
         availableUnits: quantity,
         bookedUnits: 0,
+        requestedQuantity,
         blockedDates: blockedDatesExpanded,
         unavailableReason: null,
         nights: 0,
@@ -123,7 +128,7 @@ const evaluateRoomStay = (room, bookings, stay) => {
     }
 
     result.nights = computeNights(stay.checkInDate, stay.checkOutDate);
-    result.subTotal = (Number(room.price) || 0) * result.nights;
+    result.subTotal = (Number(room.price) || 0) * result.nights * requestedQuantity;
 
     const totalGuests = (stay.adults || 0) + (stay.children || 0);
     if (stay.adults && room.guests < stay.adults) {
@@ -145,11 +150,13 @@ const evaluateRoomStay = (room, bookings, stay) => {
         room,
         bookings,
         stay.checkInDate,
-        stay.checkOutDate
+        stay.checkOutDate,
+        requestedQuantity
     );
     result.quantity = quantityStatus.quantity;
     result.availableUnits = quantityStatus.availableUnits;
     result.bookedUnits = quantityStatus.bookedUnits;
+    result.requestedQuantity = quantityStatus.requestedQuantity || requestedQuantity;
 
     if (!quantityStatus.available) {
         const bookingConflict = bookingConflictsStay(bookings, stay.checkInDate, stay.checkOutDate);
@@ -205,6 +212,7 @@ const shapeRoomForWebsite = (room, bookings, stay) => {
             quantity: stayEval.quantity,
             availableUnits: stayEval.availableUnits,
             bookedUnits: stayEval.bookedUnits,
+            requestedQuantity: stayEval.requestedQuantity,
             nights: stayEval.nights,
             subTotal: stayEval.subTotal,
             unavailableReason: stayEval.unavailableReason,

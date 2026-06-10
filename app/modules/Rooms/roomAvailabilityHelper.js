@@ -54,11 +54,17 @@ const getRoomQuantity = (room) => {
     return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
 };
 
+const getBookingUnitCount = (booking) => {
+    const units = parseInt(booking?.roomQuantity ?? booking?.quantity, 10);
+    return Number.isFinite(units) && units > 0 ? units : 1;
+};
+
 const buildBookingCountByDate = (bookings) => {
     const counts = new Map();
     bookings.forEach((booking) => {
+        const units = getBookingUnitCount(booking);
         getOccupiedDateKeysForBooking(booking.checkInDate, booking.checkOutDate).forEach((dateKey) => {
-            counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
+            counts.set(dateKey, (counts.get(dateKey) || 0) + units);
         });
     });
     return counts;
@@ -73,7 +79,7 @@ const getAllRoomBlockingBookings = async (roomId) =>
         checkInDate: { $exists: true, $ne: null },
         checkOutDate: { $exists: true, $ne: null }
     })
-        .select('bookingReference checkInDate checkOutDate status paymentStatus adults children')
+        .select('bookingReference roomQuantity checkInDate checkOutDate status paymentStatus adults children')
         .sort({ checkInDate: 1 })
         .lean();
 
@@ -247,7 +253,7 @@ const getMaxConcurrentBookings = (bookings) => {
     return max;
 };
 
-const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate) => {
+const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, requestedQuantity = 1) => {
     const quantity = getRoomQuantity(room);
     const bookingCountByDate = buildBookingCountByDate(bookings);
     const { blockedDates: adminBlockedDates } = getRoomBlockedDateData(room.blockedDates || []);
@@ -297,10 +303,25 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate) => {
         }
     }
 
+    const unitsNeeded = Math.max(parseInt(requestedQuantity, 10) || 1, 1);
+
+    if (minAvailableUnits < unitsNeeded) {
+        return {
+            quantity,
+            availableUnits: minAvailableUnits,
+            bookedUnits: maxBookedCount,
+            requestedQuantity: unitsNeeded,
+            available: false,
+            reason: `Only ${minAvailableUnits} unit(s) available for selected dates`,
+            dateKey: null
+        };
+    }
+
     return {
         quantity,
         availableUnits: minAvailableUnits,
         bookedUnits: maxBookedCount,
+        requestedQuantity: unitsNeeded,
         available: true,
         reason: null,
         dateKey: null
@@ -335,6 +356,7 @@ module.exports = {
     getOccupiedDateKeysForRange,
     getRoomBlockedDateData,
     buildBookingCountByDate,
+    getBookingUnitCount,
     getRoomQuantity,
     getMaxConcurrentBookings,
     getStayQuantityStatus,

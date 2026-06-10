@@ -5,6 +5,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 
 BASE = 'http://localhost:3002/api/v1'
+PROD_BASE = 'https://api1125.vercel.app/api/v1'
 
 
 def set_cell_shading(cell, fill):
@@ -77,13 +78,18 @@ def add_auth_note(doc, auth_type='Admin JWT'):
     add_field(doc, 'Header', 'x-access-token: <token>  OR  Authorization: Bearer <token>')
 
 
+def add_public_note(doc):
+    add_field(doc, 'Auth', 'None — public website API')
+
+
 def build_doc():
     doc = Document()
     doc.add_paragraph()
     add_title(doc, 'API Documentation')
     doc.add_paragraph()
     add_field(doc, 'Project', '1125 Hotel / Palm Island Backend')
-    add_field(doc, 'Base URL', BASE)
+    add_field(doc, 'Base URL (Local)', BASE)
+    add_field(doc, 'Base URL (Production)', PROD_BASE)
     add_field(doc, 'Version', 'v1')
     doc.add_paragraph()
 
@@ -414,6 +420,7 @@ def build_doc():
         ['type', 'required', 'string', 'Room type e.g. Villa, Suite'],
         ['price', 'required', 'number', 'Price per night'],
         ['guests', 'required', 'number', 'Max guests (min 1)'],
+        ['quantity', 'optional', 'number', 'Number of identical units. Default: 1'],
         ['size', 'required', 'number', 'Room size value'],
         ['slug', 'optional', 'string', 'URL slug (auto-generated from title if omitted)'],
         ['description', 'optional', 'string', 'Room description'],
@@ -455,6 +462,7 @@ def build_doc():
         ['type', 'optional', 'string', 'Updated type'],
         ['price', 'optional', 'number', 'Updated price per night'],
         ['guests', 'optional', 'number', 'Updated max guests'],
+        ['quantity', 'optional', 'number', 'Updated number of units (cannot be less than booked units)'],
         ['size', 'optional', 'number', 'Updated size'],
         ['description', 'optional', 'string', 'Updated description'],
         ['amenities', 'optional', 'array', 'Updated amenities list'],
@@ -858,10 +866,442 @@ def build_doc():
   ],
   "timestamp": "2026-05-26T10:00:00.000Z"
 }''')
+    n += 1
 
-    out = r'd:\1125 BE\1125 BE\docs\1125_API_Documentation_Admin.docx'
-    doc.save(out)
-    print(f'Saved: {out}')
+    # --- WEBSITE / PUBLIC ---
+    sec_web = doc.add_paragraph()
+    sec_web_run = sec_web.add_run('WEBSITE — PUBLIC APIs')
+    sec_web_run.bold = True
+    sec_web_run.font.size = Pt(16)
+    doc.add_paragraph()
+    add_field(doc, 'Note', 'All website APIs are public (no JWT). Same room routes also work at /api/v1/cabin')
+
+    # W1. List Rooms
+    add_api_heading(doc, n, 'List Rooms (Website) API')
+    add_field(doc, 'Description', 'Returns active rooms for the booking website. Filters by stay dates, adults, and quantity. Only rooms available for the requested stay are returned when dates are provided.')
+    add_field(doc, 'Endpoint', '/api/v1/rooms')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['page', 'optional', 'number', 'Page number. Default: 1'],
+        ['limit', 'optional', 'number', 'Items per page (max 50). Default: 10'],
+        ['checkInDate', 'optional', 'string', 'Stay check-in YYYY-MM-DD'],
+        ['checkOutDate', 'optional', 'string', 'Stay check-out YYYY-MM-DD'],
+        ['adult / adults', 'optional', 'number', 'Number of adults — filters by room capacity'],
+        ['children / child', 'optional', 'number', 'Number of children. Default: 0'],
+        ['quantity / qty / units', 'optional', 'number', 'Units needed — only rooms with enough free units are returned'],
+    ])
+    add_field(doc, 'Example', f'{BASE}/rooms?page=1&limit=10&checkInDate=2026-06-08&checkOutDate=2026-06-09&adult=2&quantity=1')
+    add_response(doc, '''{
+  "success": true,
+  "totalItems": 1,
+  "page": 1,
+  "limit": 10,
+  "data": [
+    {
+      "_id": "...",
+      "name": "The Villa",
+      "title": "5-Bedroom Beach Residence",
+      "slug": "the-villa",
+      "description": "...",
+      "size": 450,
+      "unit": "sq m",
+      "pricePerNight": 650,
+      "currency": "USD",
+      "currencySymbol": "$",
+      "formattedPrice": "$ 650.00/night",
+      "guests": 10,
+      "quantity": 2,
+      "adultCapacity": 10,
+      "childCapacity": 0,
+      "amenities": [],
+      "images": [{ "url": "https://...", "alt": "The Villa", "order": 0 }],
+      "availability": {
+        "isAvailable": true,
+        "quantity": 2,
+        "availableUnits": 2,
+        "bookedUnits": 0,
+        "requestedQuantity": 1,
+        "nights": 1,
+        "subTotal": 650,
+        "unavailableReason": null,
+        "blockedDates": []
+      }
+    }
+  ]
+}''')
+    n += 1
+
+    # W2. Get Room By ID
+    add_api_heading(doc, n, 'Get Room By ID (Website) API')
+    add_field(doc, 'Description', 'Returns single room details with availability for optional stay dates.')
+    add_field(doc, 'Endpoint', '/api/v1/rooms/:idOrSlug')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['idOrSlug (path)', 'required', 'string', 'Room MongoDB _id or slug e.g. the-villa'],
+        ['checkInDate', 'optional', 'string', 'Check-in YYYY-MM-DD (query)'],
+        ['checkOutDate', 'optional', 'string', 'Check-out YYYY-MM-DD (query)'],
+        ['adult / adults', 'optional', 'number', 'Adults count (query)'],
+        ['quantity', 'optional', 'number', 'Units needed (query)'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "data": {
+    "_id": "...",
+    "name": "The Villa",
+    "slug": "the-villa",
+    "pricePerNight": 650,
+    "quantity": 2,
+    "availability": {
+      "isAvailable": true,
+      "availableUnits": 2,
+      "requestedQuantity": 1,
+      "nights": 1,
+      "subTotal": 650
+    }
+  }
+}''')
+    n += 1
+
+    # W3. Check availability before checkout
+    add_api_heading(doc, n, 'Check Room Stay Availability API')
+    add_field(doc, 'Description', 'Pre-payment availability check for checkout page. Validates dates, adults, and quantity before booking.')
+    add_field(doc, 'Endpoint', '/api/v1/rooms/:idOrSlug/check-availability')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['idOrSlug (path)', 'required', 'string', 'Room _id or slug'],
+        ['checkInDate', 'required', 'string', 'Check-in YYYY-MM-DD'],
+        ['checkOutDate', 'required', 'string', 'Check-out YYYY-MM-DD'],
+        ['adult / adults', 'required', 'number', 'Number of adults'],
+        ['children', 'optional', 'number', 'Number of children'],
+        ['quantity', 'optional', 'number', 'Units to book. Default: 1'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "statusCode": 200,
+  "message": "Room is available for selected dates",
+  "data": {
+    "roomId": "...",
+    "slug": "the-villa",
+    "name": "The Villa",
+    "checkInDate": "2026-06-08",
+    "checkOutDate": "2026-06-09",
+    "adults": 2,
+    "children": 0,
+    "nights": 1,
+    "quantity": 2,
+    "requestedQuantity": 1,
+    "availableUnits": 2,
+    "bookedUnits": 0,
+    "pricePerNight": 650,
+    "subTotal": 650,
+    "totalAmount": 650,
+    "currency": "USD",
+    "isAvailable": true
+  }
+}''')
+    n += 1
+
+    # W4. Room availability calendar
+    add_api_heading(doc, n, 'Get Room Availability Calendar API')
+    add_field(doc, 'Description', 'Returns all booked, blocked, and available dates for a room (no date range params).')
+    add_field(doc, 'Endpoint', '/api/v1/rooms/:idOrSlug/availability')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['idOrSlug (path)', 'required', 'string', 'Room _id or slug'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Room availability retrieved successfully",
+  "data": {
+    "room": { "_id": "...", "title": "The Villa", "quantity": 2 },
+    "bookedDates": ["2026-06-10"],
+    "blockedDates": ["2026-07-01"],
+    "availableDates": ["2026-06-08", "2026-06-09"],
+    "partiallyBookedDates": [],
+    "occupancyByDate": {
+      "2026-06-10": { "bookedCount": 1, "availableUnits": 1, "quantity": 2 }
+    }
+  }
+}''')
+    n += 1
+
+    # --- CART ---
+    sec_cart = doc.add_paragraph()
+    sec_cart_run = sec_cart.add_run('WEBSITE — CART APIs')
+    sec_cart_run.bold = True
+    sec_cart_run.font.size = Pt(14)
+    doc.add_paragraph()
+
+    # W5. Add to cart
+    add_api_heading(doc, n, 'Add Room To Cart API')
+    add_field(doc, 'Description', 'Adds a room to cart after checking availability for the requested quantity and dates. Returns cartId — save it on the frontend.')
+    add_field(doc, 'Endpoint', '/api/v1/cart/add')
+    add_field(doc, 'Method', 'POST')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['roomId', 'required', 'string', 'Room MongoDB _id'],
+        ['checkInDate', 'required', 'string', 'Check-in YYYY-MM-DD'],
+        ['checkOutDate', 'required', 'string', 'Check-out YYYY-MM-DD'],
+        ['adults / adult', 'required', 'number', 'Number of adults (min 1)'],
+        ['children / child', 'optional', 'number', 'Number of children. Default: 0'],
+        ['quantity', 'required', 'number', 'Units to book (min 1). Checked against room availability'],
+        ['cartId', 'optional', 'string', 'Existing cart ID to append item. Omit to create new cart'],
+    ])
+    add_field(doc, 'Content-Type', 'application/json')
+    add_response(doc, '''{
+  "success": true,
+  "statusCode": 201,
+  "message": "Room added to cart",
+  "data": {
+    "cartId": "454bb0cf-4bf3-4e0f-90f0-dfdf03d66cab",
+    "subTotal": 650,
+    "currency": "USD",
+    "expiresAt": "2026-06-12T12:00:00.000Z",
+    "allAvailable": true,
+    "items": [
+      {
+        "_id": "...",
+        "roomId": "...",
+        "roomSnapshot": {
+          "title": "The Villa",
+          "slug": "the-villa",
+          "price": 650,
+          "currency": "USD",
+          "guests": 10,
+          "quantity": 2
+        },
+        "checkInDate": "2026-06-08T00:00:00.000Z",
+        "checkOutDate": "2026-06-09T00:00:00.000Z",
+        "adults": 2,
+        "children": 0,
+        "quantity": 1,
+        "nights": 1,
+        "pricePerNight": 650,
+        "subTotal": 650,
+        "isAvailable": true,
+        "unavailableReason": null
+      }
+    ]
+  }
+}''')
+    n += 1
+
+    # W6. Get cart
+    add_api_heading(doc, n, 'Get Cart API')
+    add_field(doc, 'Description', 'Returns cart with all items. Re-checks availability on each request.')
+    add_field(doc, 'Endpoint', '/api/v1/cart/:cartId')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['cartId (path)', 'required', 'string', 'Cart ID from add-to-cart response'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Cart retrieved successfully",
+  "data": {
+    "cartId": "454bb0cf-4bf3-4e0f-90f0-dfdf03d66cab",
+    "subTotal": 650,
+    "currency": "USD",
+    "allAvailable": true,
+    "items": []
+  }
+}''')
+    n += 1
+
+    # W7. Check cart availability
+    add_api_heading(doc, n, 'Check Cart Availability API')
+    add_field(doc, 'Description', 'Call on checkout page before payment. Re-validates all cart items including quantity.')
+    add_field(doc, 'Endpoint', '/api/v1/cart/:cartId/check-availability')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['cartId (path)', 'required', 'string', 'Cart ID'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Cart availability checked",
+  "data": {
+    "cartId": "...",
+    "allAvailable": true,
+    "subTotal": 650,
+    "items": [{ "isAvailable": true, "quantity": 1, "unavailableReason": null }]
+  }
+}''')
+    n += 1
+
+    # W8. Remove cart item
+    add_api_heading(doc, n, 'Remove Cart Item API')
+    add_field(doc, 'Description', 'Removes one item from the cart.')
+    add_field(doc, 'Endpoint', '/api/v1/cart/:cartId/items/:itemId')
+    add_field(doc, 'Method', 'DELETE')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['cartId (path)', 'required', 'string', 'Cart ID'],
+        ['itemId (path)', 'required', 'string', 'Cart item _id from items array'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Cart item removed",
+  "data": { "cartId": "...", "subTotal": 0, "items": [] }
+}''')
+    n += 1
+
+    # W9. Clear cart
+    add_api_heading(doc, n, 'Clear Cart API')
+    add_field(doc, 'Description', 'Removes all items from the cart.')
+    add_field(doc, 'Endpoint', '/api/v1/cart/:cartId')
+    add_field(doc, 'Method', 'DELETE')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['cartId (path)', 'required', 'string', 'Cart ID'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Cart cleared",
+  "data": { "cartId": "...", "subTotal": 0, "items": [] }
+}''')
+    n += 1
+
+    # --- BOOKING WEBSITE ---
+    sec_book = doc.add_paragraph()
+    sec_book_run = sec_book.add_run('WEBSITE — BOOKING & PAYMENT (Hubtel)')
+    sec_book_run.bold = True
+    sec_book_run.font.size = Pt(14)
+    doc.add_paragraph()
+
+    # W10. Create booking
+    add_api_heading(doc, n, 'Create Room Booking API (Hubtel)')
+    add_field(doc, 'Description', 'Creates booking from cart or direct room selection. Checks quantity availability, then initiates Hubtel payment. Redirect user to checkoutUrl.')
+    add_field(doc, 'Endpoint', '/api/v1/booking/room')
+    add_field(doc, 'Method', 'POST')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['cartId', 'optional*', 'string', 'Cart ID — use this OR roomId below'],
+        ['roomId', 'optional*', 'string', 'Direct booking without cart'],
+        ['checkInDate', 'required**', 'string', 'Required when using roomId (not cart)'],
+        ['checkOutDate', 'required**', 'string', 'Required when using roomId'],
+        ['adults', 'required**', 'number', 'Required when using roomId'],
+        ['quantity', 'required**', 'number', 'Units to book when using roomId'],
+        ['children', 'optional', 'number', 'Children count'],
+        ['guestDetails', 'required', 'object', 'Guest information object'],
+        ['guestDetails.firstName', 'required', 'string', 'Guest first name'],
+        ['guestDetails.lastName', 'required', 'string', 'Guest last name'],
+        ['guestDetails.email', 'required', 'string', 'Guest email'],
+        ['guestDetails.mobileNumber', 'required', 'string', 'Guest phone e.g. 233241234567'],
+        ['guestDetails.countryCode', 'optional', 'string', 'Country code'],
+        ['guestDetails.specialRequests', 'optional', 'string', 'Special requests'],
+    ])
+    add_field(doc, 'Note', '* Send cartId OR roomId. ** Required only for direct roomId booking.')
+    add_field(doc, 'Content-Type', 'application/json')
+    add_response(doc, '''{
+  "success": true,
+  "statusCode": 201,
+  "message": "Booking created. Complete payment with Hubtel.",
+  "data": {
+    "bookingReference": "ABC12XYZ",
+    "bookingIds": ["..."],
+    "totalAmount": 650,
+    "currency": "USD",
+    "paymentMethod": "Hubtel",
+    "checkoutUrl": "https://pay.hubtel.com/...",
+    "bookings": []
+  }
+}''')
+    n += 1
+
+    # W11. Hubtel callback
+    add_api_heading(doc, n, 'Hubtel Payment Callback API')
+    add_field(doc, 'Description', 'Server-to-server webhook from Hubtel when payment completes. Configure HUBTEL_CALLBACK_URL to this endpoint.')
+    add_field(doc, 'Endpoint', '/api/v1/booking/hubtel/callback')
+    add_field(doc, 'Method', 'POST')
+    add_field(doc, 'Auth', 'Called by Hubtel servers')
+    add_request_table(doc, [
+        ['ClientReference', 'required', 'string', 'bookingReference sent during checkout'],
+        ['Status', 'required', 'string', 'Paid | Unpaid | etc.'],
+        ['TransactionId', 'optional', 'string', 'Hubtel transaction ID'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Callback processed"
+}''')
+    n += 1
+
+    # W12. Confirm payment
+    add_api_heading(doc, n, 'Confirm Booking Payment API')
+    add_field(doc, 'Description', 'Called after customer returns from Hubtel checkout page to verify payment status.')
+    add_field(doc, 'Endpoint', '/api/v1/booking/confirm')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['reference', 'required', 'string', 'bookingReference query param'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Booking payment status checked",
+  "data": {
+    "isPaid": true,
+    "status": "Paid",
+    "bookings": [{ "bookingReference": "ABC12XYZ", "status": "Confirmed", "paymentStatus": "paid" }]
+  }
+}''')
+    n += 1
+
+    # W13. Get booking by reference
+    add_api_heading(doc, n, 'Get Booking By Reference API')
+    add_field(doc, 'Description', 'Returns booking details by booking reference number.')
+    add_field(doc, 'Endpoint', '/api/v1/booking/reference/:reference')
+    add_field(doc, 'Method', 'GET')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['reference (path)', 'required', 'string', 'Booking reference e.g. ABC12XYZ'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "message": "Booking retrieved",
+  "data": {
+    "bookingReference": "ABC12XYZ",
+    "bookings": [{
+      "roomId": "...",
+      "roomSnapshot": { "title": "The Villa" },
+      "roomQuantity": 1,
+      "checkInDate": "2026-06-08T00:00:00.000Z",
+      "checkOutDate": "2026-06-09T00:00:00.000Z",
+      "totalAmount": 650,
+      "status": "Confirmed",
+      "paymentStatus": "paid"
+    }]
+  }
+}''')
+    n += 1
+
+    # W14. Contact submit
+    add_api_heading(doc, n, 'Submit Contact Message API')
+    add_field(doc, 'Description', 'Public contact form submission from website.')
+    add_field(doc, 'Endpoint', '/api/v1/contact')
+    add_field(doc, 'Method', 'POST')
+    add_public_note(doc)
+    add_request_table(doc, [
+        ['name', 'required', 'string', 'Sender name'],
+        ['email', 'required', 'string', 'Sender email'],
+        ['message', 'required', 'string', 'Message or query text'],
+    ])
+    add_response(doc, '''{
+  "success": true,
+  "statusCode": 201,
+  "message": "Message sent successfully",
+  "data": { "_id": "...", "name": "John", "email": "john@email.com" }
+}''')
+
+    out_admin = r'd:\1125 BE\1125 BE\docs\1125_API_Documentation_Admin.docx'
+    out_full = r'd:\1125 BE\1125 BE\docs\1125_API_Documentation.docx'
+    doc.save(out_admin)
+    doc.save(out_full)
+    print(f'Saved: {out_admin}')
+    print(f'Saved: {out_full}')
 
 
 if __name__ == '__main__':

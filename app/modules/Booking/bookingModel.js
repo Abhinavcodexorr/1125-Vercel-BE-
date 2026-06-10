@@ -44,6 +44,11 @@ const bookingSchema = new mongoose.Schema({
         required: false,
         min: 0
     },
+    roomQuantity: {
+        type: Number,
+        default: 1,
+        min: 1
+    },
     // Cart-based: multiple cabins (from cart.items)
     cabins: [{
         cabinId: { type: mongoose.Schema.Types.ObjectId, ref: 'Cabin', required: true },
@@ -262,6 +267,11 @@ bookingSchema.methods.getFormattedBooking = function() {
         _id: this._id,
         bookingReference: this.bookingReference,
         cabinId: this.cabinId,
+        roomId: this.roomId,
+        roomSnapshot: this.roomSnapshot || null,
+        nights: this.nights,
+        roomPricePerNight: this.roomPricePerNight,
+        roomQuantity: this.roomQuantity || 1,
         package: this.package || null, // Include package array if present
         activities: Array.isArray(this.activities)
             ? this.activities.map((a) => (a && typeof a.toObject === 'function' ? a.toObject() : a))
