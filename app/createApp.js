@@ -155,10 +155,15 @@ const createApp = () => {
             next();
         } catch (err) {
             console.error('Database connection failed:', err.message);
+            const missingUri =
+                process.env.VERCEL &&
+                (!process.env.MONGO_URI && !process.env.MONGODB_URI);
             return res.status(503).json({
                 success: false,
-                message: 'Database connection failed. Check MONGO_URI on the server.',
-                error: process.env.NODE_ENV === 'development' ? err.message : undefined
+                message: missingUri
+                    ? 'MONGO_URI is not set on Vercel. Add it in Project → Settings → Environment Variables.'
+                    : 'Database connection failed. Check MONGO_URI on the server.',
+                error: err.message
             });
         }
     });
