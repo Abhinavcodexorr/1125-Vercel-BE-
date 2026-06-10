@@ -2,44 +2,48 @@ const AWS = require('aws-sdk');
 const moment = require('moment');
 const response = require('../../helper/response');
 const msg = require('./uploadMessages');
+const { getAwsConfig } = require('../../config/aws.config');
 
-const stripEnv = (value) => {
-    if (value == null) return '';
-    return String(value).replace(/^['"]|['"]$/g, '').trim();
+let s3Client = null;
+let cachedConfig = null;
+
+const getS3 = () => {
+    const config = getAwsConfig();
+    if (
+        !config.accessKey ||
+        !config.secretKey ||
+        !config.bucket ||
+        !config.region
+    ) {
+        return { s3: null, config };
+    }
+
+    if (
+        !s3Client ||
+        !cachedConfig ||
+        cachedConfig.accessKey !== config.accessKey ||
+        cachedConfig.secretKey !== config.secretKey ||
+        cachedConfig.region !== config.region
+    ) {
+        s3Client = new AWS.S3({
+            region: config.region,
+            credentials: {
+                accessKeyId: config.accessKey,
+                secretAccessKey: config.secretKey
+            }
+        });
+        cachedConfig = config;
+    }
+
+    return { s3: s3Client, config };
 };
 
-const aws_access_key = stripEnv(
-    process.env.AWS_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID
-);
-const aws_secret_key = stripEnv(
-    process.env.AWS_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY
-);
-const aws_bucket_name = stripEnv(process.env.BUCKET_NAME);
-const aws_region = stripEnv(process.env.AWS_REGION);
-const aws_endpoint = stripEnv(process.env.AWS_ENDPOINT);
-
-const s3Configured = !!(aws_access_key && aws_secret_key && aws_bucket_name && aws_region);
-
-if (!s3Configured) {
-    console.error('AWS S3 Configuration Missing');
-}
-
-const s3 = s3Configured
-    ? new AWS.S3({
-          region: aws_region,
-          credentials: {
-              accessKeyId: aws_access_key,
-              secretAccessKey: aws_secret_key
-          }
-      })
-    : null;
-
-const buildPublicUrl = (folder, fileName) => {
-    if (aws_endpoint) {
-        const base = aws_endpoint.replace(/\/$/, '');
+const buildPublicUrl = (config, folder, fileName) => {
+    if (config.endpoint) {
+        const base = config.endpoint.replace(/\/$/, '');
         return `${base}/${folder}/${fileName}`;
     }
-    return `https://${aws_bucket_name}.s3.${aws_region}.amazonaws.com/${folder}/${fileName}`;
+    return `https://${config.bucket}.s3.${config.region}.amazonaws.com/${folder}/${fileName}`;
 };
 
 const generate_file_name = async (file_name) => {
@@ -52,22 +56,22 @@ const generate_file_name = async (file_name) => {
     return `${name}_${current_millis}.${ext}`.toLowerCase();
 };
 
-const upload_file_to_s3 = (file_name, folder, mime_type, buffer) =>
+const upload_file_to_s3 = (s3, config, file_name, folder, mime_type, buffer) =>
     new Promise((resolve, reject) => {
         const params = {
-            Bucket: aws_bucket_name,
+            Bucket: config.bucket,
             Key: `${folder}/${file_name}`,
             Body: buffer,
             ContentType: mime_type
         };
         s3.putObject(params, (err) => {
             if (err) return reject(err);
-            resolve({ Location: buildPublicUrl(folder, file_name) });
+            resolve({ Location: buildPublicUrl(config, folder, file_name) });
         });
     });
 
-const upload_images = async (file_name, folder, buffer, mime_type) => {
-    const uploadResponse = await upload_file_to_s3(file_name, folder, mime_type, buffer);
+const upload_images = async (s3, config, file_name, folder, buffer, mime_type) => {
+    const uploadResponse = await upload_file_to_s3(s3, config, file_name, folder, mime_type, buffer);
     return {
         file_url: uploadResponse.Location,
         file_name
@@ -80,23 +84,26 @@ const normalizeUploadFiles = (filesInput) => {
 };
 
 const assertS3Ready = (res) => {
-    if (!s3Configured || !s3) {
+    const { s3, config } = getS3();
+    if (!s3) {
         response.serverError500(res, msg.AWS_CONFIG_MISSING, {
             missing: {
-                AWS_ACCESS_KEY: !aws_access_key,
-                AWS_SECRET_KEY: !aws_secret_key,
-                BUCKET_NAME: !aws_bucket_name,
-                AWS_REGION: !aws_region
+                AWS_ACCESS_KEY: !config.accessKey,
+                AWS_SECRET_KEY: !config.secretKey,
+                BUCKET_NAME: !config.bucket,
+                AWS_REGION: !config.region
             }
         });
-        return false;
+        return null;
     }
-    return true;
+    return { s3, config };
 };
 
 exports.upload_file = async (req, res) => {
     try {
-        if (!assertS3Ready(res)) return;
+        const s3Ready = assertS3Ready(res);
+        if (!s3Ready) return;
+        const { s3, config } = s3Ready;
 
         if (!req.files || !req.files.files) {
             return response.error400(res, msg.NO_FILE);
@@ -111,7 +118,7 @@ exports.upload_file = async (req, res) => {
         }
 
         const file_name = await generate_file_name(name);
-        const uploadResponse = await upload_images(file_name, 'images', data, mimetype);
+        const uploadResponse = await upload_images(s3, config, file_name, 'images', data, mimetype);
         return response.success200(res, msg.UPLOAD_SUCCESS, uploadResponse);
     } catch (err) {
         console.error('Upload error:', err);
@@ -121,7 +128,9 @@ exports.upload_file = async (req, res) => {
 
 exports.upload_room_images = async (req, res) => {
     try {
-        if (!assertS3Ready(res)) return;
+        const s3Ready = assertS3Ready(res);
+        if (!s3Ready) return;
+        const { s3, config } = s3Ready;
 
         if (!req.files || !req.files.files) {
             return response.error400(res, msg.NO_FILE);
@@ -139,7 +148,7 @@ exports.upload_room_images = async (req, res) => {
                 return response.error400(res, msg.UNSUPPORTED_TYPE);
             }
             const file_name = await generate_file_name(file.name);
-            const result = await upload_images(file_name, 'rooms', file.data, file.mimetype);
+            const result = await upload_images(s3, config, file_name, 'rooms', file.data, file.mimetype);
             uploaded.push({
                 url: result.file_url,
                 file_name: result.file_name,
