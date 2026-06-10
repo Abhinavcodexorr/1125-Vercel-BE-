@@ -8,8 +8,12 @@ const stripEnv = (value) => {
     return String(value).replace(/^['"]|['"]$/g, '').trim();
 };
 
-const aws_access_key = stripEnv(process.env.AWS_ACCESS_KEY);
-const aws_secret_key = stripEnv(process.env.AWS_SECRET_KEY);
+const aws_access_key = stripEnv(
+    process.env.AWS_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID
+);
+const aws_secret_key = stripEnv(
+    process.env.AWS_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY
+);
 const aws_bucket_name = stripEnv(process.env.BUCKET_NAME);
 const aws_region = stripEnv(process.env.AWS_REGION);
 const aws_endpoint = stripEnv(process.env.AWS_ENDPOINT);
