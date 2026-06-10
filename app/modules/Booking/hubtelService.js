@@ -1,4 +1,5 @@
 const axios = require('axios');
+const appConfig = require('../../config/app.config');
 
 const getHubtelConfig = () => {
     const apiId = (process.env.HUBTEL_API_ID || process.env.HUBTEL_CLIENT_ID || '').trim();
@@ -8,8 +9,10 @@ const getHubtelConfig = () => {
         process.env.HUBTEL_MERCHANT_ACCOUNT ||
         ''
     ).trim();
-    const callbackUrl = (process.env.HUBTEL_CALLBACK_URL || '').trim();
-    const returnUrl = (process.env.HUBTEL_RETURN_URL || '').trim();
+    const callbackUrl = (
+        process.env.HUBTEL_CALLBACK_URL || appConfig.joinApi('booking/hubtel/callback')
+    ).trim();
+    const returnUrl = (process.env.HUBTEL_RETURN_URL || appConfig.joinApi('booking/confirm')).trim();
     const cancellationUrl = (process.env.HUBTEL_CANCELLATION_URL || returnUrl).trim();
     const initiateUrl =
         (process.env.HUBTEL_INITIATE_URL || 'https://payproxyapi.hubtel.com/items/initiate').trim();

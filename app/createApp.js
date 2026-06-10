@@ -9,6 +9,7 @@ const helmet = require('helmet');
 const logger = require('./helper/logger.js');
 const routes = require('./modules/router.js');
 const connectDB = require('./bootstrap');
+const appConfig = require('./config/app.config');
 
 const allowedOrigins = [
     'http://localhost:3000',
@@ -74,11 +75,8 @@ const createApp = () => {
             description: '1125 backend API documentation'
         },
         servers: [
-            {
-                url: process.env.VERCEL_URL
-                    ? `https://${process.env.VERCEL_URL}`
-                    : `http://localhost:${port}`
-            }
+            { url: appConfig.BASE_URL },
+            { url: `http://localhost:${port}` }
         ]
     };
 
@@ -144,7 +142,10 @@ const createApp = () => {
         res.json({
             success: true,
             message: 'Welcome to 1125 API',
-            apiBase: '/api/v1',
+            baseUrl: appConfig.BASE_URL,
+            apiBase: appConfig.API_PATH.replace(/\/$/, ''),
+            apiBaseUrl: appConfig.API_BASE_URL,
+            config: `${appConfig.API_BASE_URL}/config`,
             health: '/health'
         });
     });
