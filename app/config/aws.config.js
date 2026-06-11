@@ -13,7 +13,7 @@ const pick = (keys, fallback = '') => {
     return fallback;
 };
 
-/** Keys must come from environment variables (.env locally, platform env in production). */
+/** Keys must come from environment variables (set in .env). */
 const getAwsConfig = () => ({
     accessKey: pick(['AWS_ACCESS_KEY', 'AWS_ACCESS_KEY_ID']),
     secretKey: pick(['AWS_SECRET_KEY', 'AWS_SECRET_ACCESS_KEY']),
