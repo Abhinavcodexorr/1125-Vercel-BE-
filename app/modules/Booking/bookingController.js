@@ -2778,31 +2778,143 @@ const getDashboard = async (req, res) => {
     }
 };
 
-// Get bookings for calendar display
+const parseCalendarDateRange = (startDate, endDate) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return null;
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+};
+
+const calendarStayOverlapMongo = (start, end) => ({
+    $or: [
+        {
+            $and: [
+                { checkInDate: { $exists: true, $ne: null } },
+                { checkOutDate: { $exists: true, $ne: null } },
+                { checkInDate: { $lte: end } },
+                { checkOutDate: { $gte: start } }
+            ]
+        },
+        {
+            $and: [
+                { 'cabins.0': { $exists: true } },
+                { 'cabins.checkInDate': { $lte: end } },
+                { 'cabins.checkOutDate': { $gte: start } }
+            ]
+        }
+    ]
+});
+
+const buildCalendarGuest = (guestDetails = {}) => ({
+    firstName: guestDetails.firstName || '',
+    lastName: guestDetails.lastName || '',
+    email: guestDetails.email || '',
+    mobileNumber: guestDetails.mobileNumber || ''
+});
+
+const buildCalendarEventBase = (booking, guest) => ({
+    id: booking._id,
+    bookingReference: booking.bookingReference,
+    guest,
+    adults: booking.adults,
+    children: booking.children,
+    totalAmount: booking.totalAmount,
+    currency: booking.currency,
+    paymentStatus: booking.paymentStatus,
+    status: booking.status,
+    createdAt: booking.createdAt
+});
+
+const expandBookingToCalendarEvents = (booking) => {
+    const guest = buildCalendarGuest(booking.guestDetails);
+    const guestLabel = `${guest.firstName} ${guest.lastName}`.trim();
+
+    if (booking.roomId) {
+        const roomName = booking.roomSnapshot?.title || 'Room';
+        return [{
+            ...buildCalendarEventBase(booking, guest),
+            bookingType: 'room',
+            title: guestLabel ? `${roomName} - ${guestLabel}` : roomName,
+            start: booking.checkInDate,
+            end: booking.checkOutDate,
+            room: {
+                id: booking.roomId,
+                name: roomName,
+                slug: booking.roomSnapshot?.slug || null,
+                type: booking.roomSnapshot?.type || null,
+                quantity: booking.roomQuantity || 1
+            },
+            cabin: null
+        }];
+    }
+
+    const cartCabins = Array.isArray(booking.cabins) ? booking.cabins : [];
+    if (cartCabins.length > 0) {
+        return cartCabins.map((line, index) => {
+            const cabinName = line.cabinName || 'Cabin';
+            return {
+                ...buildCalendarEventBase(booking, guest),
+                bookingType: 'cabin',
+                cabinIndex: index,
+                title: guestLabel ? `${cabinName} - ${guestLabel}` : cabinName,
+                start: line.checkInDate,
+                end: line.checkOutDate,
+                adults: line.adults ?? booking.adults,
+                children: line.children ?? booking.children,
+                totalAmount: line.totalAmount ?? booking.totalAmount,
+                currency: line.currency || booking.currency,
+                cabin: {
+                    id: line.cabinId || null,
+                    name: cabinName,
+                    cabinType: null
+                },
+                room: null
+            };
+        });
+    }
+
+    const populatedCabin =
+        booking.cabinId && typeof booking.cabinId === 'object' ? booking.cabinId : null;
+    const cabinName = populatedCabin?.name || 'Cabin';
+    const start = booking.checkInDate;
+    const end = booking.checkOutDate;
+    if (!start || !end) return [];
+
+    return [{
+        ...buildCalendarEventBase(booking, guest),
+        bookingType: 'cabin',
+        title: guestLabel ? `${cabinName} - ${guestLabel}` : cabinName,
+        start,
+        end,
+        cabin: {
+            id: populatedCabin?._id || booking.cabinId || null,
+            name: cabinName,
+            cabinType: populatedCabin?.cabinType || null
+        },
+        room: null
+    }];
+};
+
+// Get bookings for calendar display (room + cabin stays; activity-only excluded)
 const getCalendarBookings = async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
 
         const filter = {
             isDeleted: { $ne: true },
-            paymentStatus: 'paid', // Only paid bookings
-            status: 'Confirmed', // Only confirmed status (excludes cancelled automatically)
-            // Cabin calendar: exclude activity-only bookings (no cabin stay)
-            $and: [bookingHasCabinStayMongo]
+            paymentStatus: 'paid',
+            status: { $ne: 'Cancelled' },
+            $and: [bookingAdminListMongo]
         };
 
         if (startDate && endDate) {
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+            const range = parseCalendarDateRange(startDate, endDate);
+            if (!range) {
                 return response.error400(res, "Invalid date format. Please use YYYY-MM-DD format");
             }
-
-            filter.$and.push(
-                { checkInDate: { $lte: end } },
-                { checkOutDate: { $gte: start } }
-            );
+            filter.$and.push(calendarStayOverlapMongo(range.start, range.end));
         }
 
         const bookings = await Booking.find(filter)
@@ -2812,36 +2924,11 @@ const getCalendarBookings = async (req, res) => {
             })
             .sort({ checkInDate: 1 });
 
-        const calendarBookings = bookings.map(booking => {
-            const cabin = booking.cabinId;
-            return {
-                id: booking._id,
-                bookingReference: booking.bookingReference,
-                title: cabin ? `${cabin.name} - ${booking.guestDetails?.firstName || ''} ${booking.guestDetails?.lastName || ''}`.trim() : `Booking ${booking.bookingReference}`,
-                start: booking.checkInDate,
-                end: booking.checkOutDate,
-                cabin: {
-                    id: cabin?._id || null,
-                    name: cabin?.name || 'N/A',
-                    cabinType: cabin?.cabinType || 'N/A'
-                },
-                guest: {
-                    firstName: booking.guestDetails?.firstName || '',
-                    lastName: booking.guestDetails?.lastName || '',
-                    email: booking.guestDetails?.email || '',
-                    mobileNumber: booking.guestDetails?.mobileNumber || ''
-                },
-                adults: booking.adults,
-                children: booking.children,
-                totalAmount: booking.totalAmount,
-                currency: booking.currency,
-                paymentStatus: booking.paymentStatus,
-                status: booking.status,
-                createdAt: booking.createdAt
-            };
-        });
+        const calendarBookings = bookings
+            .flatMap(expandBookingToCalendarEvents)
+            .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-        console.log(`Retrieved ${calendarBookings.length} calendar cabin bookings (paid & confirmed; activity-only excluded)`);
+        console.log(`Retrieved ${calendarBookings.length} calendar stay events (paid, non-cancelled)`);
         return response.success200(
             res,
             "Calendar bookings retrieved successfully",
