@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: palm-island-api
+    name: 1125-web-service
     runtime: node
     plan: free
     region: frankfurt
