@@ -1,4 +1,4 @@
-require('../loadEnv');
+require('dotenv').config();
 
 const stripEnv = (value) => {
     if (value == null) return '';
@@ -9,12 +9,6 @@ const stripEnv = (value) => {
 const resolveApiBaseUrl = () => {
     const explicit = stripEnv(process.env.API_PUBLIC_URL || process.env.BASE_URL);
     if (explicit) return explicit.replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');
-
-    const render = stripEnv(process.env.RENDER_EXTERNAL_URL);
-    if (render) return render.replace(/\/$/, '');
-
-    const vercel = stripEnv(process.env.VERCEL_URL);
-    if (vercel) return `https://${vercel.replace(/^https?:\/\//, '')}`;
 
     const port = stripEnv(process.env.PORT) || '3002';
     return `http://localhost:${port}`;

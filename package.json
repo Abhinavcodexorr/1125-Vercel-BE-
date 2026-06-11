@@ -1,15 +1,11 @@
 {
   "name": "Palm Island",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "dev": "node server.js",
     "prod": "cross-env NODE_ENV=production node server.js",
-    "start": "node server.js",
-    "render-build": "npm install"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node server.js"
   },
   "author": "",
   "license": "ISC",

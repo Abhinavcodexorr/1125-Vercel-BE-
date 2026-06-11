@@ -1,4 +1,4 @@
-require('../loadEnv');
+require('dotenv').config();
 
 const stripEnv = (value) => {
     if (value == null) return '';
