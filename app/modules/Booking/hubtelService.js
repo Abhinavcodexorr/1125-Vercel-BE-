@@ -1,37 +1,12 @@
 const axios = require('axios');
+const { getHubtelSettings, getHubtelConfigErrors } = require('../../config/hubtel.config');
 
-const getHubtelConfig = () => {
-    const apiId = (process.env.HUBTEL_API_ID || process.env.HUBTEL_CLIENT_ID || '').trim();
-    const apiKey = (process.env.HUBTEL_API_KEY || process.env.HUBTEL_CLIENT_SECRET || '').trim();
-    const merchantAccountNumber = (
-        process.env.HUBTEL_MERCHANT_ACCOUNT_NUMBER ||
-        process.env.HUBTEL_MERCHANT_ACCOUNT ||
-        ''
-    ).trim();
-    const callbackUrl = (process.env.HUBTEL_CALLBACK_URL || '').trim();
-    const returnUrl = (process.env.HUBTEL_RETURN_URL || '').trim();
-    const cancellationUrl = (process.env.HUBTEL_CANCELLATION_URL || returnUrl).trim();
-    const initiateUrl =
-        (process.env.HUBTEL_INITIATE_URL || 'https://payproxyapi.hubtel.com/items/initiate').trim();
-    const statusUrlBase =
-        (process.env.HUBTEL_STATUS_URL || 'https://api.hubtel.com/v2/pos/onlinecheckout').trim();
-
-    return {
-        apiId,
-        apiKey,
-        merchantAccountNumber,
-        callbackUrl,
-        returnUrl,
-        cancellationUrl,
-        initiateUrl,
-        statusUrlBase
-    };
-};
+const getHubtelConfig = () => getHubtelSettings();
 
 const getAuthHeader = () => {
     const { apiId, apiKey } = getHubtelConfig();
     if (!apiId || !apiKey) {
-        throw new Error('Hubtel credentials are not configured');
+        throw new Error('Hubtel credentials are not configured (set HUBTEL_API_ID and HUBTEL_API_KEY)');
     }
     return `Basic ${Buffer.from(`${apiId}:${apiKey}`).toString('base64')}`;
 };
@@ -43,8 +18,9 @@ const initiateCheckout = async ({
     customerPhoneNumber
 }) => {
     const config = getHubtelConfig();
-    if (!config.merchantAccountNumber || !config.callbackUrl || !config.returnUrl) {
-        throw new Error('Hubtel merchant account, callback URL, and return URL must be configured');
+    const missing = getHubtelConfigErrors(config);
+    if (missing.length) {
+        throw new Error(`Hubtel configuration missing: ${missing.join(', ')}`);
     }
 
     const payload = {

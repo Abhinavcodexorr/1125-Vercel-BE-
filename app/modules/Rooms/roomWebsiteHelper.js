@@ -101,7 +101,11 @@ const evaluateRoomStay = (room, bookings, stay) => {
         getRoomBlockedDateData(room.blockedDates || []).blocked
     );
 
-    const requestedQuantity = stay.requestedQuantity || 1;
+    // Default 1 unit when quantity omitted; use provided value when sent in query/body
+    const requestedQuantity =
+        stay.requestedQuantity != null && stay.requestedQuantity > 0
+            ? stay.requestedQuantity
+            : 1;
 
     const result = {
         isAvailable: true,

@@ -110,8 +110,11 @@ const createRoomBooking = async (req, res) => {
             await cart.save();
         } else if (roomId) {
             const input = parseCartItemInput(req.body);
-            if (!input.checkInDate || !input.checkOutDate || !input.adults || !input.quantity) {
-                return response.error400(res, 'roomId, checkInDate, checkOutDate, adults, and quantity are required');
+            if (!input.checkInDate || !input.checkOutDate || !input.adults) {
+                return response.error400(res, 'roomId, checkInDate, checkOutDate, and adults are required');
+            }
+            if (input.quantityProvided && input.quantity == null) {
+                return response.error400(res, 'quantity must be at least 1');
             }
 
             const evaluation = await evaluateCartItemAvailability(roomId, input);

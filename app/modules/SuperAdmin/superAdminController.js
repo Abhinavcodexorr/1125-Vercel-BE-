@@ -62,7 +62,7 @@ const login = async (req, res) => {
             return response.unauthorized401(res, "Your account is blocked by superadmin.");
         }
 
-        const isPasswordValid = await superAdmin.comparePassword(password);
+        const isPasswordValid = await superAdmin.comparePassword(String(password).trim());
         
         if (!isPasswordValid) {
             return response.unauthorized401(res, "Invalid email or password");
@@ -102,20 +102,70 @@ const login = async (req, res) => {
     }
 };
 
-// Create default superadmin account if it doesn't exist
+// Create or repair default superadmin (Atlas / fresh DB safe)
 const createDefaultSuperAdmin = async () => {
     try {
-        const existingSuperAdmin = await SuperAdmin.findOne({ email: '1125demo@gmail.com' });
-        
-        if (!existingSuperAdmin) {
-            const defaultSuperAdmin = new SuperAdmin({
-                email: '1125demo@gmail.com',
-                password: 'qwerty',
-                role: 'SuperAdmin'
-            });
+        const defaultEmail = (process.env.DEFAULT_ADMIN_EMAIL || '1125demo@gmail.com')
+            .toLowerCase()
+            .trim();
+        const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'qwerty';
 
-            await defaultSuperAdmin.save();
-            console.log('Default SuperAdmin created: 1125demo@gmail.com');
+        let admin = await SuperAdmin.findOne({ email: defaultEmail });
+
+        if (!admin) {
+            admin = new SuperAdmin({
+                email: defaultEmail,
+                password: defaultPassword,
+                role: 'SuperAdmin',
+                isActive: true,
+                isDeleted: false,
+                isBlocked: false
+            });
+            await admin.save();
+            console.log(`Default SuperAdmin created: ${defaultEmail}`);
+            return;
+        }
+
+        let needsSave = false;
+
+        if (!admin.isActive) {
+            admin.isActive = true;
+            needsSave = true;
+        }
+        if (admin.isDeleted) {
+            admin.isDeleted = false;
+            needsSave = true;
+        }
+        if (admin.isBlocked) {
+            admin.isBlocked = false;
+            needsSave = true;
+        }
+        if (admin.lockUntil) {
+            admin.lockUntil = undefined;
+            admin.loginAttempts = 0;
+            needsSave = true;
+        }
+
+        const passwordLooksHashed = String(admin.password || '').startsWith('$2');
+        const forceSync = process.env.SYNC_DEFAULT_ADMIN === 'true';
+
+        if (!passwordLooksHashed) {
+            admin.password = defaultPassword;
+            admin.activeToken = null;
+            needsSave = true;
+            console.log(`Default SuperAdmin password repaired (was not hashed): ${defaultEmail}`);
+        } else if (forceSync) {
+            const passwordMatches = await admin.comparePassword(defaultPassword);
+            if (!passwordMatches) {
+                admin.password = defaultPassword;
+                admin.activeToken = null;
+                needsSave = true;
+                console.log(`Default SuperAdmin password synced from env: ${defaultEmail}`);
+            }
+        }
+
+        if (needsSave) {
+            await admin.save();
         }
     } catch (error) {
         console.error('Error creating default SuperAdmin:', error.message);

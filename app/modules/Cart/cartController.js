@@ -39,7 +39,7 @@ const addToCart = async (req, res) => {
         if (!input.adults) {
             return response.error400(res, msg.ADULTS_REQUIRED);
         }
-        if (!input.quantity) {
+        if (input.quantityProvided && input.quantity == null) {
             return response.error400(res, msg.QUANTITY_MIN);
         }
 

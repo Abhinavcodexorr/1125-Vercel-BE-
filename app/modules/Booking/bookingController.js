@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const Booking = require('./bookingModel');
-const { bookingHasCabinStayMongo, bookingHasActivityOnlyMongo } = require('./bookingQueryHelpers');
+const { bookingHasCabinStayMongo, bookingAdminListMongo, bookingHasActivityOnlyMongo } =
+    require('./bookingQueryHelpers');
+const { formatAdminBookingRow, buildFilterMessage } = require('./bookingAdminHelper');
 const response = require('../../helper/response');
 const sendEmail = require('../../middleware/mail');
 const { sendCancellationEmail } = require('./cancellationEmailService');
@@ -428,15 +430,20 @@ const createBooking = async (req, res) => {
 const getAllBookings = async (req, res) => {
     try {
         const { filter: filterQuery, type: typeQuery } = req.query;
-        const mongoFilter = {
-            isDeleted: { $ne: true },
-            ...bookingHasCabinStayMongo
-        };
-        const filterKey = String(filterQuery || typeQuery || '')
+        const rawFilter = String(filterQuery || typeQuery || '')
             .trim()
             .toLowerCase();
+        const filterKey =
+            rawFilter === 'paid' || rawFilter === 'incomplete' || rawFilter === 'cancelled'
+                ? rawFilter
+                : 'all';
+
+        const mongoFilter = {
+            isDeleted: { $ne: true },
+            ...bookingAdminListMongo
+        };
+
         if (filterKey === 'incomplete') {
-            // Not fully paid yet, and not cancelled
             mongoFilter.paymentStatus = { $nin: ['paid', 'refunded'] };
             mongoFilter.status = { $ne: 'Cancelled' };
         } else if (filterKey === 'paid') {
@@ -445,23 +452,25 @@ const getAllBookings = async (req, res) => {
         } else if (filterKey === 'cancelled') {
             mongoFilter.status = 'Cancelled';
         }
-        const bookings = await Booking.find(mongoFilter)
-            .sort({ createdAt: -1 });
+
+        const bookings = await Booking.find(mongoFilter).sort({ createdAt: -1 });
 
         const packageTitleMap = buildPackageTitleMapFromBookingDocs(bookings);
 
-        const result = bookings.map((b) => {
-            const row = b.getFormattedBooking();
-            delete row.activities;
-            row.package = buildEnrichedPackageListForBooking(b, packageTitleMap);
-            return row;
-        });
+        const result = bookings.map((b) =>
+            formatAdminBookingRow(
+                b,
+                buildEnrichedPackageListForBooking(b, packageTitleMap)
+            )
+        );
+
         return res.status(200).json({
             success: true,
             statusCode: 200,
-            message: 'Bookings retrieved successfully',
-            data: result,
+            message: buildFilterMessage(filterKey, result.length),
+            filter: filterKey,
             total: result.length,
+            data: result,
             timestamp: new Date().toISOString()
         });
     } catch (error) {

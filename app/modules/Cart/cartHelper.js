@@ -8,19 +8,32 @@ const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
     String(new mongoose.Types.ObjectId(value)) === String(value);
 
+const parseRequestedQuantity = (body) => {
+    const raw = body.quantity ?? body.qty ?? body.units;
+    if (raw == null || raw === '') {
+        return { quantity: 1, quantityProvided: false };
+    }
+    const parsed = parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+        return { quantity: null, quantityProvided: true };
+    }
+    return { quantity: parsed, quantityProvided: true };
+};
+
 const parseCartItemInput = (body) => {
     const checkIn = toDateOnly(body.checkInDate);
     const checkOut = toDateOnly(body.checkOutDate);
     const adults = parseInt(body.adults ?? body.adult, 10);
     const children = parseInt(body.children ?? body.child ?? 0, 10);
-    const quantity = parseInt(body.quantity ?? 1, 10);
+    const { quantity, quantityProvided } = parseRequestedQuantity(body);
 
     return {
         checkInDate: checkIn,
         checkOutDate: checkOut,
         adults: Number.isFinite(adults) && adults > 0 ? adults : null,
         children: Number.isFinite(children) && children >= 0 ? children : 0,
-        quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : null
+        quantity,
+        quantityProvided
     };
 };
 
@@ -150,6 +163,7 @@ const shapeCartResponse = (cart) => ({
 
 module.exports = {
     isObjectId,
+    parseRequestedQuantity,
     parseCartItemInput,
     loadActiveRoom,
     buildStayFromCartItem,

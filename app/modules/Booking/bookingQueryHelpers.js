@@ -6,6 +6,15 @@ const bookingHasCabinStayMongo = {
     $or: [{ cabinId: { $exists: true, $ne: null } }, { 'cabins.0': { $exists: true } }]
 };
 
+/** Admin list: cabin stays + room website bookings */
+const bookingAdminListMongo = {
+    $or: [
+        { cabinId: { $exists: true, $ne: null } },
+        { 'cabins.0': { $exists: true } },
+        { roomId: { $exists: true, $ne: null } }
+    ]
+};
+
 /** Activity-only rows: has activities[] and no cabin stay (no root cabinId, no cabins[]). */
 const bookingHasActivityOnlyMongo = {
     $and: [
@@ -19,4 +28,8 @@ const bookingHasActivityOnlyMongo = {
     ]
 };
 
-module.exports = { bookingHasCabinStayMongo, bookingHasActivityOnlyMongo };
+module.exports = {
+    bookingHasCabinStayMongo,
+    bookingAdminListMongo,
+    bookingHasActivityOnlyMongo
+};
