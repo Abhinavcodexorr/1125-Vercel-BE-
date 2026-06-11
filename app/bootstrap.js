@@ -32,11 +32,13 @@ const connectDB = async () => {
     if (!cached.initialized) {
         cached.initialized = true;
 
-        const Booking = require('./modules/Booking/bookingModel');
-        try {
-            await Booking.syncIndexes();
-        } catch (syncErr) {
-            console.warn('[DB] Booking.syncIndexes:', syncErr.message);
+        if (!process.env.VERCEL || process.env.SYNC_INDEXES === 'true') {
+            const Booking = require('./modules/Booking/bookingModel');
+            try {
+                await Booking.syncIndexes();
+            } catch (syncErr) {
+                console.warn('[DB] Booking.syncIndexes:', syncErr.message);
+            }
         }
 
         const superAdminController = require('./modules/SuperAdmin/superAdminController');

@@ -6,7 +6,7 @@ const { isSuperSub } = require('../../middleware/authJWT');
 
 router.use(fileUpload());
 
-router.post('/', Upload.upload_file);
+router.post('/', isSuperSub, Upload.upload_file);
 router.post('/room-image', isSuperSub, Upload.upload_room_images);
 
 module.exports = router;
