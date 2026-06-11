@@ -1,4 +1,6 @@
 require('../app/loadEnv');
 const createApp = require('../app/createApp');
 
-module.exports = createApp();
+const app = createApp();
+
+module.exports = app;
