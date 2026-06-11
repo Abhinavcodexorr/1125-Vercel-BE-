@@ -10,25 +10,13 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 
 const env = process.env.NODE_ENV || 'production';
-const isProduction = env === 'production' || env === 'prod';
-let envFile = null;
-
-if (!isProduction) {
+let envFile = '.env';
+if (env !== 'production' && env !== 'prod') {
     envFile = fs.existsSync(path.resolve(__dirname, '.env.development'))
         ? '.env.development'
         : '.env';
-    require('dotenv').config({ path: path.resolve(__dirname, envFile) });
-} else if (fs.existsSync(path.resolve(__dirname, '.env'))) {
-    envFile = '.env';
-    require('dotenv').config({ path: path.resolve(__dirname, envFile) });
 }
-
-if (isProduction && !process.env.MONGO_URI && !process.env.MONGODB_URI) {
-    console.error(
-        'MONGO_URI is not set. Add it in Render Dashboard → Environment (Atlas connection string).'
-    );
-    process.exit(1);
-}
+require('dotenv').config({ path: path.resolve(__dirname, envFile) });
 
 const logger = require('./app/helper/logger.js');
 const routes = require('./app/modules/router.js');
@@ -195,7 +183,8 @@ const connectDB = async () => {
     return mongoose.connection;
 };
 
-console.log(`Environment: ${env} (${envFile ? `loaded ${envFile}` : 'using platform env vars'})`);
+console.log(`Loading environment file: ${envFile}`);
+console.log('Environment:', process.env.NODE_ENV);
 
 connectDB()
     .then(() => {
