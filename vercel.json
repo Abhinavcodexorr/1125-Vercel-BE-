@@ -1,6 +1,7 @@
 {
+  "buildCommand": "",
   "functions": {
-    "server.js": {
+    "index.js": {
       "maxDuration": 30
     }
   }

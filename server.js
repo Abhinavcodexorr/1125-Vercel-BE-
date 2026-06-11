@@ -1,12 +1,9 @@
-const envFile = require('./app/loadEnv');
-const createApp = require('./app/createApp');
+const app = require('./index');
 const connectDB = require('./app/bootstrap');
 
-console.log(`Loading environment file: ${envFile}`);
 console.log('Environment:', process.env.NODE_ENV);
 
 const PORT = process.env.PORT || 3002;
-const app = createApp();
 
 if (!process.env.VERCEL) {
     connectDB()
@@ -30,5 +27,3 @@ if (!process.env.VERCEL) {
             process.exit(1);
         });
 }
-
-module.exports = app;

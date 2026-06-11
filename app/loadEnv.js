@@ -10,6 +10,9 @@ if (env !== 'production' && env !== 'prod') {
         : '.env';
 }
 
-require('dotenv').config({ path: path.resolve(__dirname, '..', envFile) });
+const envPath = path.resolve(__dirname, '..', envFile);
+if (!process.env.RENDER && fs.existsSync(envPath)) {
+    require('dotenv').config({ path: envPath });
+}
 
 module.exports = envFile;

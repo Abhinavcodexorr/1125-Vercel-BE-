@@ -8,7 +8,11 @@ const consoleLogFormat = format.combine(
   })
 );
 
-const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+const isServerless = !!(
+    process.env.VERCEL ||
+    process.env.RENDER ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME
+);
 
 const loggerTransports = [
   new transports.Console({

@@ -10,8 +10,10 @@ if (!cached) {
 const connectDB = async () => {
     const mongoUrl = dbConfig.url;
 
-    if (process.env.VERCEL && (!mongoUrl || /127\.0\.0\.1|localhost/.test(mongoUrl))) {
-        throw new Error('MONGO_URI must be set to a MongoDB Atlas connection string on Vercel');
+    const isHosted = process.env.VERCEL || process.env.RENDER;
+    if (isHosted && (!mongoUrl || /127\.0\.0\.1|localhost/.test(mongoUrl))) {
+        const host = process.env.RENDER ? 'Render' : 'Vercel';
+        throw new Error(`MONGO_URI must be set to a MongoDB Atlas connection string on ${host}`);
     }
 
     if (cached.conn) {
@@ -32,7 +34,7 @@ const connectDB = async () => {
     if (!cached.initialized) {
         cached.initialized = true;
 
-        if (!process.env.VERCEL || process.env.SYNC_INDEXES === 'true') {
+        if (!process.env.VERCEL || process.env.SYNC_INDEXES === 'true' || process.env.RENDER) {
             const Booking = require('./modules/Booking/bookingModel');
             try {
                 await Booking.syncIndexes();

@@ -36,6 +36,7 @@ const isAllowedOrigin = (origin) => {
     if (!origin) return true;
     if (allowedOrigins.includes(origin)) return true;
     if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return true;
+    if (/^https:\/\/[a-z0-9-]+\.onrender\.com$/i.test(origin)) return true;
     return false;
 };
 
@@ -156,12 +157,13 @@ const createApp = () => {
         } catch (err) {
             console.error('Database connection failed:', err.message);
             const missingUri =
-                process.env.VERCEL &&
+                (process.env.VERCEL || process.env.RENDER) &&
                 (!process.env.MONGO_URI && !process.env.MONGODB_URI);
+            const hostLabel = process.env.RENDER ? 'Render' : 'Vercel';
             return res.status(503).json({
                 success: false,
                 message: missingUri
-                    ? 'MONGO_URI is not set on Vercel. Add it in Project → Settings → Environment Variables.'
+                    ? `MONGO_URI is not set on ${hostLabel}. Add it in the service environment variables.`
                     : 'Database connection failed. Check MONGO_URI on the server.',
                 error: err.message
             });
