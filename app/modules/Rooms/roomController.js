@@ -520,19 +520,28 @@ const getRoomAvailability = async (req, res) => {
     }
 };
 
-const parseBlockRange = (startDate, endDate) => {
-    const start = toDateOnly(startDate);
-    const end = toDateOnly(endDate);
-    if (!start || !end) return null;
-    if (end <= start) return null;
-    return { startDate: start, endDate: end };
+const parseBlockRange = (startDate, endDate, singleDate) => {
+    const start = toDateOnly(singleDate || startDate);
+    if (!start) return null;
+
+    const endRaw = toDateOnly(endDate);
+
+    // Single calendar date: date only, or startDate === endDate, or endDate omitted
+    if (!endRaw || endRaw.getTime() === start.getTime()) {
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        return { startDate: start, endDate: end };
+    }
+
+    if (endRaw < start) return null;
+    return { startDate: start, endDate: endRaw };
 };
 
 const normalizeBlockInput = (body) => {
     if (Array.isArray(body.blocks) && body.blocks.length > 0) {
         return body.blocks
             .map((block) => {
-                const range = parseBlockRange(block.startDate, block.endDate);
+                const range = parseBlockRange(block.startDate, block.endDate, block.date);
                 if (!range) return null;
                 return {
                     ...range,
@@ -542,7 +551,7 @@ const normalizeBlockInput = (body) => {
             .filter(Boolean);
     }
 
-    const range = parseBlockRange(body.startDate, body.endDate);
+    const range = parseBlockRange(body.startDate, body.endDate, body.date);
     if (!range) return null;
     return [
         {
@@ -564,7 +573,7 @@ const blockRoomDates = async (req, res) => {
             if (Array.isArray(req.body.blocks)) {
                 return response.error400(res, msg.BLOCK_DATES_INVALID_ITEM);
             }
-            if (!req.body.startDate || !req.body.endDate) {
+            if (!req.body.date && !req.body.startDate && !req.body.endDate) {
                 return response.error400(res, msg.BLOCK_DATES_REQUIRED);
             }
             return response.error400(res, msg.BLOCK_DATES_INVALID);

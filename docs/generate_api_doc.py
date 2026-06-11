@@ -868,6 +868,50 @@ def build_doc():
 }''')
     n += 1
 
+    # --- SUBSCRIBE ADMIN ---
+    sec_sub_admin = doc.add_paragraph()
+    sec_sub_admin_run = sec_sub_admin.add_run('ADMIN — SUBSCRIBE APIs')
+    sec_sub_admin_run.bold = True
+    sec_sub_admin_run.font.size = Pt(14)
+    doc.add_paragraph()
+
+    # 32. List Subscribers
+    add_api_heading(doc, n, 'List Subscribers API')
+    add_field(doc, 'Description', 'Returns newsletter / subscribe emails collected from the website subscribe section.')
+    add_field(doc, 'Endpoint', '/api/v1/subscribe/admin')
+    add_field(doc, 'Method', 'GET')
+    add_auth_note(doc)
+    add_field(doc, 'Base URL (Local)', BASE)
+    add_field(doc, 'Base URL (Production)', PROD_BASE)
+    add_request_table(doc, [
+        ['page', 'optional', 'number', 'Page number. Default: 1'],
+        ['limit', 'optional', 'number', 'Items per page (max 100). Default: 20'],
+        ['search / email', 'optional', 'string', 'Filter subscribers by email'],
+    ])
+    add_field(doc, 'Example (Local)', f'{BASE}/subscribe/admin?page=1&limit=20')
+    add_field(doc, 'Example (Production)', f'{PROD_BASE}/subscribe/admin?page=1&limit=20')
+    add_response(doc, '''{
+  "success": true,
+  "statusCode": 200,
+  "message": "Subscribers retrieved successfully",
+  "total": 45,
+  "page": 1,
+  "limit": 20,
+  "totalPages": 3,
+  "data": [
+    {
+      "_id": "...",
+      "email": "user@example.com",
+      "source": "website",
+      "subscribedAt": "2026-06-11T10:00:00.000Z",
+      "createdAt": "2026-06-11T10:00:00.000Z",
+      "updatedAt": "2026-06-11T10:00:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-11T10:00:00.000Z"
+}''')
+    n += 1
+
     # --- WEBSITE / PUBLIC ---
     sec_web = doc.add_paragraph()
     sec_web_run = sec_web.add_run('WEBSITE — PUBLIC APIs')
@@ -1294,6 +1338,48 @@ def build_doc():
   "statusCode": 201,
   "message": "Message sent successfully",
   "data": { "_id": "...", "name": "John", "email": "john@email.com" }
+}''')
+    n += 1
+
+    # W15. Subscribe (newsletter)
+    add_api_heading(doc, n, 'Subscribe Email API')
+    add_field(doc, 'Description', 'Public newsletter subscribe — saves user email only. Separate from contact form.')
+    add_field(doc, 'Endpoint', '/api/v1/subscribe')
+    add_field(doc, 'Method', 'POST')
+    add_public_note(doc)
+    add_field(doc, 'Base URL (Local)', f'{BASE.replace("/api/v1", "")}/api/v1/subscribe')
+    add_field(doc, 'Base URL (Production)', f'{PROD_BASE.replace("/api/v1", "")}/api/v1/subscribe')
+    add_field(doc, 'Content-Type', 'application/json')
+    add_request_table(doc, [
+        ['email', 'required', 'string', 'Subscriber email address'],
+        ['source', 'optional', 'string', 'Where subscribed from e.g. website-footer. Default: website'],
+    ])
+    add_field(doc, 'Request body (required)', '{"email": "user@example.com"}')
+    add_field(doc, 'Request body (optional source)', '{"email": "user@example.com", "source": "website-footer"}')
+    add_field(doc, 'Example (Local)', 'http://localhost:3002/api/v1/subscribe')
+    add_field(doc, 'Example (Production)', 'https://api1125.vercel.app/api/v1/subscribe')
+    add_response(doc, '''Success (201):
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Subscribed successfully",
+  "data": {
+    "_id": "...",
+    "email": "user@example.com",
+    "source": "website",
+    "subscribedAt": "2026-06-11T10:00:00.000Z",
+    "createdAt": "2026-06-11T10:00:00.000Z",
+    "updatedAt": "2026-06-11T10:00:00.000Z"
+  },
+  "timestamp": "2026-06-11T10:00:00.000Z"
+}
+
+Already subscribed (400):
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "This email is already subscribed",
+  "timestamp": "2026-06-11T10:00:00.000Z"
 }''')
 
     out_admin = r'd:\1125 BE\1125 BE\docs\1125_API_Documentation_Admin.docx'
