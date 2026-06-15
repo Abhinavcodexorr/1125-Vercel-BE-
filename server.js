@@ -41,9 +41,7 @@ const allowedOrigins = [
     'https://www.palmislandgh.com',
     'https://palmislandgh.com',
     'https://api.geoapify.com',
-    'http://13.49.45.25/',
-    'https://1125-vercel-fe.vercel.app',
-    
+    'http://13.49.45.25/'
 ];
 
 const isAllowedOrigin = (origin) => {

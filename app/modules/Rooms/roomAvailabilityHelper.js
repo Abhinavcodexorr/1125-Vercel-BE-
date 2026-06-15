@@ -1,6 +1,25 @@
 const Booking = require('../Booking/bookingModel');
 
-const BLOCKING_STATUSES = ['Pending', 'Confirmed', 'Checked-In', 'Checked-Out'];
+/** Only paid, confirmed stays block room availability on the website. */
+const BLOCKING_STATUSES = ['Confirmed', 'Checked-In', 'Checked-Out'];
+const BLOCKING_PAYMENT_STATUSES = ['paid'];
+
+const roomBlockingBookingQuery = (roomId) => {
+    const query = {
+        isDeleted: false,
+        status: { $in: BLOCKING_STATUSES },
+        paymentStatus: { $in: BLOCKING_PAYMENT_STATUSES },
+        checkInDate: { $exists: true, $ne: null },
+        checkOutDate: { $exists: true, $ne: null }
+    };
+    if (roomId) {
+        query.roomId = roomId;
+    }
+    return query;
+};
+
+const BLOCKING_BOOKING_SELECT =
+    'roomId roomQuantity bookingReference checkInDate checkOutDate status paymentStatus adults children';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** How far ahead to list open dates (full array, not paginated). Override via ROOM_AVAILABILITY_DAYS in .env */
 const DEFAULT_AVAILABLE_HORIZON_DAYS =
@@ -71,17 +90,21 @@ const buildBookingCountByDate = (bookings) => {
 };
 
 const getAllRoomBlockingBookings = async (roomId) =>
-    Booking.find({
-        roomId,
-        isDeleted: false,
-        status: { $in: BLOCKING_STATUSES },
-        paymentStatus: { $in: ['paid', 'pending', 'incomplete'] },
-        checkInDate: { $exists: true, $ne: null },
-        checkOutDate: { $exists: true, $ne: null }
-    })
-        .select('bookingReference roomQuantity checkInDate checkOutDate status paymentStatus adults children')
+    Booking.find(roomBlockingBookingQuery(roomId))
+        .select(BLOCKING_BOOKING_SELECT)
         .sort({ checkInDate: 1 })
         .lean();
+
+const getRoomBlockingBookingsByRoomIds = async (roomIds = []) => {
+    if (!roomIds.length) return [];
+    return Booking.find({
+        ...roomBlockingBookingQuery(),
+        roomId: { $in: roomIds }
+    })
+        .select(BLOCKING_BOOKING_SELECT)
+        .sort({ checkInDate: 1 })
+        .lean();
+};
 
 const getOccupiedDateKeysForRange = (startDate, endDate) =>
     getOccupiedDateKeysForBooking(startDate, endDate);
@@ -351,6 +374,8 @@ const validateRoomQuantityUpdate = (room, bookings, newQuantity) => {
 
 module.exports = {
     getAllRoomBlockingBookings,
+    getRoomBlockingBookingsByRoomIds,
+    roomBlockingBookingQuery,
     buildFullRoomAvailability,
     getOccupiedDateKeysForBooking,
     getOccupiedDateKeysForRange,

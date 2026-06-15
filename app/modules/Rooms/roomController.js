@@ -1,10 +1,10 @@
 const mongoose = require('mongoose');
 const Room = require('./roomModel');
-const Booking = require('../Booking/bookingModel');
 const response = require('../../helper/response');
 const msg = require('./roomMessages');
 const {
     getAllRoomBlockingBookings,
+    getRoomBlockingBookingsByRoomIds,
     buildFullRoomAvailability,
     getRoomBlockedDateData,
     validateRoomQuantityUpdate,
@@ -362,18 +362,7 @@ const getRoomsForWebsite = async (req, res) => {
         }
 
         const roomIds = rooms.map((r) => r._id);
-        const allBookings = roomIds.length
-            ? await Booking.find({
-                      roomId: { $in: roomIds },
-                      isDeleted: false,
-                      status: { $in: ['Pending', 'Confirmed', 'Checked-In', 'Checked-Out'] },
-                      paymentStatus: { $in: ['paid', 'pending', 'incomplete'] },
-                      checkInDate: { $exists: true, $ne: null },
-                      checkOutDate: { $exists: true, $ne: null }
-                  })
-                  .select('roomId roomQuantity bookingReference checkInDate checkOutDate status paymentStatus')
-                  .lean()
-            : [];
+        const allBookings = await getRoomBlockingBookingsByRoomIds(roomIds);
 
         const bookingsByRoom = {};
         allBookings.forEach((booking) => {

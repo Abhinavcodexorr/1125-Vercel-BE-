@@ -1,8 +1,15 @@
 const mongoose = require('mongoose');
 const Booking = require('./bookingModel');
+const Room = require('../Rooms/roomModel');
 const { bookingHasCabinStayMongo, bookingAdminListMongo, bookingHasActivityOnlyMongo } =
     require('./bookingQueryHelpers');
 const { formatAdminBookingRow, buildFilterMessage } = require('./bookingAdminHelper');
+const {
+    parseStayQuery,
+    shapeRoomForWebsite,
+    getAllRoomBlockingBookings
+} = require('../Rooms/roomWebsiteHelper');
+const { formatDateKey } = require('../Rooms/roomAvailabilityHelper');
 const response = require('../../helper/response');
 const sendEmail = require('../../middleware/mail');
 const { sendCancellationEmail } = require('./cancellationEmailService');
@@ -2897,10 +2904,48 @@ const expandBookingToCalendarEvents = (booking) => {
     }];
 };
 
+const resolveCalendarStayQuery = (query) =>
+    parseStayQuery({
+        ...query,
+        checkInDate: query.checkInDate || query.checkinDate || query.startDate,
+        checkOutDate: query.checkOutDate || query.checkoutDate || query.endDate
+    });
+
+const buildCalendarRoomsAvailability = async (stay) => {
+    const rooms = await Room.find({ isDeleted: false, isActive: true })
+        .sort({ createdAt: -1 })
+        .lean();
+
+    const shapedRooms = await Promise.all(
+        rooms.map(async (room) => {
+            const bookings = await getAllRoomBlockingBookings(room._id);
+            return shapeRoomForWebsite(room, bookings, stay);
+        })
+    );
+
+    const availableRooms = shapedRooms.filter((room) => room.availability.isAvailable).length;
+
+    return {
+        checkInDate: formatDateKey(stay.checkInDate),
+        checkOutDate: formatDateKey(stay.checkOutDate),
+        summary: {
+            totalRooms: shapedRooms.length,
+            availableRooms,
+            unavailableRooms: shapedRooms.length - availableRooms
+        },
+        rooms: shapedRooms
+    };
+};
+
 // Get bookings for calendar display (room + cabin stays; activity-only excluded)
 const getCalendarBookings = async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const stay = resolveCalendarStayQuery(req.query);
+        const hasDateFilter = stay.hasStayDates;
+
+        if (hasDateFilter && !stay.validStayDates) {
+            return response.error400(res, 'Invalid check-in or check-out dates. Use YYYY-MM-DD with check-out after check-in.');
+        }
 
         const filter = {
             isDeleted: { $ne: true },
@@ -2909,11 +2954,11 @@ const getCalendarBookings = async (req, res) => {
             $and: [bookingAdminListMongo]
         };
 
-        if (startDate && endDate) {
-            const range = parseCalendarDateRange(startDate, endDate);
-            if (!range) {
-                return response.error400(res, "Invalid date format. Please use YYYY-MM-DD format");
-            }
+        if (hasDateFilter) {
+            const range = parseCalendarDateRange(
+                formatDateKey(stay.checkInDate),
+                formatDateKey(stay.checkOutDate)
+            );
             filter.$and.push(calendarStayOverlapMongo(range.start, range.end));
         }
 
@@ -2928,15 +2973,25 @@ const getCalendarBookings = async (req, res) => {
             .flatMap(expandBookingToCalendarEvents)
             .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-        console.log(`Retrieved ${calendarBookings.length} calendar stay events (paid, non-cancelled)`);
+        const payload = hasDateFilter
+            ? {
+                  bookings: calendarBookings,
+                  rooms: await buildCalendarRoomsAvailability(stay)
+              }
+            : calendarBookings;
+
+        console.log(
+            `Retrieved ${calendarBookings.length} calendar stay events` +
+                (hasDateFilter ? ' with room availability' : '')
+        );
         return response.success200(
             res,
-            "Calendar bookings retrieved successfully",
-            calendarBookings
+            'Calendar bookings retrieved successfully',
+            payload
         );
     } catch (error) {
         console.error(`Error retrieving calendar bookings: ${error.message}`);
-        return response.serverError500(res, "Error retrieving calendar bookings", error.message);
+        return response.serverError500(res, 'Error retrieving calendar bookings', error.message);
     }
 };
 
