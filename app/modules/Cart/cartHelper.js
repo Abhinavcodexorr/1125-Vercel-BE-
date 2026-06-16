@@ -101,8 +101,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
         pricePerNight,
         subTotal: stayEval.subTotal,
         currency: room.currency || 'GHS',
-        isAvailable: stayEval.isAvailable,
-        unavailableReason: stayEval.unavailableReason || null
+        isAvailable: stayEval.isAvailable
     };
 };
 
@@ -126,7 +125,6 @@ const refreshCartAvailability = async (cart) => {
         const result = await evaluateCartItemAvailability(item.roomId, input);
         if (!result.ok || !result.room) {
             item.isAvailable = false;
-            item.unavailableReason = result.message || 'Room not available';
             continue;
         }
         const rebuilt = buildCartItemFromEvaluation(result.room, input, result.stayEval);

@@ -6,7 +6,8 @@ const { bookingHasCabinStayMongo, bookingAdminListMongo, bookingHasActivityOnlyM
 const { formatAdminBookingRow, buildFilterMessage } = require('./bookingAdminHelper');
 const {
     parseStayQuery,
-    shapeRoomForWebsite,
+    shapeRoomBaseForWebsite,
+    evaluateRoomStay,
     getAllRoomBlockingBookings
 } = require('../Rooms/roomWebsiteHelper');
 const { formatDateKey } = require('../Rooms/roomAvailabilityHelper');
@@ -2919,11 +2920,12 @@ const buildCalendarRoomsAvailability = async (stay) => {
     const shapedRooms = await Promise.all(
         rooms.map(async (room) => {
             const bookings = await getAllRoomBlockingBookings(room._id);
-            return shapeRoomForWebsite(room, bookings, stay);
+            const stayEval = evaluateRoomStay(room, bookings, stay);
+            return { room: shapeRoomBaseForWebsite(room), stayEval };
         })
     );
 
-    const availableRooms = shapedRooms.filter((room) => room.availability.isAvailable).length;
+    const availableRooms = shapedRooms.filter(({ stayEval }) => stayEval.isAvailable).length;
 
     return {
         checkInDate: formatDateKey(stay.checkInDate),
@@ -2933,7 +2935,7 @@ const buildCalendarRoomsAvailability = async (stay) => {
             availableRooms,
             unavailableRooms: shapedRooms.length - availableRooms
         },
-        rooms: shapedRooms
+        rooms: shapedRooms.map(({ room }) => room)
     };
 };
 

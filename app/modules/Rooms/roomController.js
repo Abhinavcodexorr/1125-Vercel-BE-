@@ -15,7 +15,7 @@ const {
 } = require('./roomAvailabilityHelper');
 const {
     parseStayQuery,
-    shapeRoomForWebsite,
+    shapeRoomBaseForWebsite,
     filterRoomsForStay,
     evaluateRoomStay
 } = require('./roomWebsiteHelper');
@@ -371,22 +371,24 @@ const getRoomsForWebsite = async (req, res) => {
             bookingsByRoom[key].push(booking);
         });
 
-        let shaped = rooms.map((room) =>
-            shapeRoomForWebsite(room, bookingsByRoom[String(room._id)] || [], stay)
-        );
+        let shaped = rooms.map((room) => {
+            const bookings = bookingsByRoom[String(room._id)] || [];
+            const stayEval = evaluateRoomStay(room, bookings, stay);
+            return { room: shapeRoomBaseForWebsite(room), stayEval };
+        });
 
         if (stay.hasStayDates && stay.validStayDates) {
-            shaped = shaped.filter((room) => room.availability.isAvailable);
+            shaped = shaped.filter(({ stayEval }) => stayEval.isAvailable);
             if (stay.requestedQuantity) {
                 shaped = shaped.filter(
-                    (room) => room.availability.availableUnits >= stay.requestedQuantity
+                    ({ stayEval }) => stayEval.availableUnits >= stay.requestedQuantity
                 );
             }
         }
 
         const totalItems = shaped.length;
         const start = (stay.page - 1) * stay.limit;
-        const paginated = shaped.slice(start, start + stay.limit).map(({ availability, ...room }) => room);
+        const paginated = shaped.slice(start, start + stay.limit).map(({ room }) => room);
 
         return res.status(200).json({
             success: true,
@@ -403,24 +405,15 @@ const getRoomsForWebsite = async (req, res) => {
 
 const getRoomByIdForWebsite = async (req, res) => {
     try {
-        const stay = parseStayQuery(req.query);
-
-        if (stay.hasStayDates && !stay.validStayDates) {
-            return response.error400(res, msg.STAY_DATES_INVALID);
-        }
-
         const room = await Room.findOne(buildRoomLookup(req.params.id, { isActive: true })).lean();
 
         if (!room) {
             return response.notFound404(res, msg.ROOM_NOT_FOUND);
         }
 
-        const bookings = await getAllRoomBlockingBookings(room._id);
-        const data = shapeRoomForWebsite(room, bookings, stay);
-
         return res.status(200).json({
             success: true,
-            data
+            data: shapeRoomBaseForWebsite(room)
         });
     } catch (error) {
         console.error('Get website room error:', error.message);
@@ -468,7 +461,6 @@ const checkRoomStayAvailability = async (req, res) => {
             totalAmount: stayEval.subTotal,
             currency: room.currency || 'GHS',
             isAvailable: stayEval.isAvailable,
-            unavailableReason: stayEval.unavailableReason,
             conflictingBooking: stayEval.conflictingBooking || null
         };
 

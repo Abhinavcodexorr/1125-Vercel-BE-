@@ -181,9 +181,8 @@ const evaluateRoomStay = (room, bookings, stay) => {
     return result;
 };
 
-const shapeRoomForWebsite = (room, bookings, stay) => {
+const shapeRoomBaseForWebsite = (room) => {
     const currency = room.currency || 'GHS';
-    const stayEval = evaluateRoomStay(room, bookings, stay);
 
     return {
         _id: room._id,
@@ -210,19 +209,7 @@ const shapeRoomForWebsite = (room, bookings, stay) => {
             order: img.order ?? index
         })),
         isActive: room.isActive,
-        isDeleted: room.isDeleted,
-        availability: {
-            isAvailable: stayEval.isAvailable,
-            quantity: stayEval.quantity,
-            availableUnits: stayEval.availableUnits,
-            bookedUnits: stayEval.bookedUnits,
-            requestedQuantity: stayEval.requestedQuantity,
-            nights: stayEval.nights,
-            subTotal: stayEval.subTotal,
-            unavailableReason: stayEval.unavailableReason,
-            conflictingBooking: stayEval.conflictingBooking || null,
-            blockedDates: stayEval.blockedDates
-        }
+        isDeleted: room.isDeleted
     };
 };
 
@@ -235,7 +222,7 @@ module.exports = {
     parseStayQuery,
     formatPrice,
     evaluateRoomStay,
-    shapeRoomForWebsite,
+    shapeRoomBaseForWebsite,
     filterRoomsForStay,
     getAllRoomBlockingBookings,
     CURRENCY_SYMBOLS

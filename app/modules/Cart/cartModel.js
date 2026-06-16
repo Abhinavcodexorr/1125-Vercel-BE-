@@ -21,8 +21,7 @@ const cartItemSchema = new mongoose.Schema(
         pricePerNight: { type: Number, default: 0, min: 0 },
         subTotal: { type: Number, default: 0, min: 0 },
         currency: { type: String, default: 'GHS' },
-        isAvailable: { type: Boolean, default: true },
-        unavailableReason: { type: String, default: null }
+        isAvailable: { type: Boolean, default: true }
     },
     { timestamps: true }
 );

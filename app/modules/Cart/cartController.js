@@ -51,7 +51,6 @@ const addToCart = async (req, res) => {
             return response.error400(res, msg.ROOM_NOT_AVAILABLE, null, {
                 data: {
                     isAvailable: false,
-                    unavailableReason: evaluation.stayEval.unavailableReason,
                     availableUnits: evaluation.stayEval.availableUnits,
                     requestedQuantity: input.quantity
                 }
