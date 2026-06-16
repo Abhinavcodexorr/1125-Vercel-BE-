@@ -154,8 +154,7 @@ const shapeCartResponse = (cart) => ({
         pricePerNight: item.pricePerNight,
         subTotal: item.subTotal,
         currency: item.currency,
-        isAvailable: item.isAvailable,
-        unavailableReason: item.unavailableReason
+        isAvailable: item.isAvailable
     })),
     allAvailable: cart.items.every((item) => item.isAvailable),
     updatedAt: cart.updatedAt

@@ -14,7 +14,7 @@ const denySubAdminForWrite = (req, res, next) => {
     next();
 };
 
-router.post('/room', roomBookingController.createRoomBooking);
+router.post('/create', roomBookingController.createRoomBooking);
 router.post('/hubtel/callback', roomBookingController.handleHubtelCallback);
 router.get('/confirm', roomBookingController.confirmHubtelBooking);
 router.get('/reference/:reference', roomBookingController.getBookingByReference);

@@ -386,7 +386,7 @@ const getRoomsForWebsite = async (req, res) => {
 
         const totalItems = shaped.length;
         const start = (stay.page - 1) * stay.limit;
-        const paginated = shaped.slice(start, start + stay.limit);
+        const paginated = shaped.slice(start, start + stay.limit).map(({ availability, ...room }) => room);
 
         return res.status(200).json({
             success: true,
@@ -500,9 +500,11 @@ const getRoomAvailability = async (req, res) => {
         if (!room) return;
 
         const bookings = await getAllRoomBlockingBookings(room._id);
-        const data = buildFullRoomAvailability(room, bookings);
+        const availability = buildFullRoomAvailability(room, bookings);
 
-        return response.success200(res, msg.ROOM_AVAILABILITY_RETRIEVED, data);
+        return response.success200(res, msg.ROOM_AVAILABILITY_RETRIEVED, {
+            bookedDates: availability.bookedDates
+        });
     } catch (error) {
         console.error('Get room availability error:', error.message);
         return response.serverError500(res, msg.GET_FAILED, error.message);
