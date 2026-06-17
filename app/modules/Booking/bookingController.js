@@ -3,7 +3,7 @@ const Booking = require('./bookingModel');
 const Room = require('../Rooms/roomModel');
 const { bookingHasCabinStayMongo, bookingAdminListMongo, bookingHasActivityOnlyMongo } =
     require('./bookingQueryHelpers');
-const { formatAdminBookingRow, buildFilterMessage } = require('./bookingAdminHelper');
+const { formatAdminBookingRow, buildFilterMessage, fetchBookingStatisticsSummary } = require('./bookingAdminHelper');
 const {
     parseStayQuery,
     shapeRoomBaseForWebsite,
@@ -837,51 +837,7 @@ const getBookingsByDates = async (req, res) => {
 // Get booking statistics and analytics
 const getBookingStatistics = async (req, res) => {
     try {
-        const totalBookings = await Booking.countDocuments({ isDeleted: false });
-        
-        const statusStats = await Booking.aggregate([
-            { $match: { isDeleted: false } },
-            {
-                $group: {
-                    _id: null,
-                    totalBookings: { $sum: 1 },
-                    pendingBookings: {
-                        $sum: { $cond: [{ $eq: ['$status', 'Pending'] }, 1, 0] }
-                    },
-                    confirmedBookings: {
-                        $sum: { $cond: [{ $eq: ['$status', 'Confirmed'] }, 1, 0] }
-                    },
-                    checkedInBookings: {
-                        $sum: { $cond: [{ $eq: ['$status', 'Checked-In'] }, 1, 0] }
-                    },
-                    checkedOutBookings: {
-                        $sum: { $cond: [{ $eq: ['$status', 'Checked-Out'] }, 1, 0] }
-                    },
-                    cancelledBookings: {
-                        $sum: { $cond: [{ $eq: ['$status', 'Cancelled'] }, 1, 0] }
-                    },
-                    totalRevenue: { $sum: '$totalAmount' },
-                    averageBookingValue: { $avg: '$totalAmount' }
-                }
-            }
-        ]);
-
-        const paymentStats = await Booking.aggregate([
-            { $match: { isDeleted: false } },
-            {
-                $group: {
-                    _id: '$paymentStatus',
-                    count: { $sum: 1 },
-                    totalAmount: { $sum: '$totalAmount' }
-                }
-            }
-        ]);
-
-        const result = {
-            totalBookings,
-            statusBreakdown: statusStats[0] || {},
-            paymentBreakdown: paymentStats
-        };
+        const result = await fetchBookingStatisticsSummary();
 
         console.log("Booking statistics retrieved");
         return response.success200(res, "Booking statistics retrieved successfully", result);
@@ -2652,131 +2608,10 @@ const checkPaymentStatus = async (req, res) => {
     }
 };
 
-// Dashboard API - Get all dashboard statistics
-// Get dashboard statistics and analytics
+// Dashboard API — same summary as /statistics (total, cancelled, confirmed paid revenue)
 const getDashboard = async (req, res) => {
     try {
-        const activityOnlyPaidConfirmedFilter = {
-            isDeleted: { $ne: true },
-            paymentStatus: 'paid',
-            status: 'Confirmed',
-            ...bookingHasActivityOnlyMongo
-        };
-
-        const completedActivitiesOnlyBookings = await Booking.countDocuments(
-            activityOnlyPaidConfirmedFilter
-        );
-        const cancelledActivitiesOnlyBookings = await Booking.countDocuments({
-            isDeleted: { $ne: true },
-            status: 'Cancelled',
-            ...bookingHasActivityOnlyMongo
-        });
-
-        const activityOnlyPaymentStats = await Booking.aggregate([
-            { $match: activityOnlyPaidConfirmedFilter },
-            {
-                $group: {
-                    _id: null,
-                    totalPayment: { $sum: '$totalAmount' }
-                }
-            }
-        ]);
-        const activitiesAmountCollected =
-            activityOnlyPaymentStats.length > 0 ? activityOnlyPaymentStats[0].totalPayment : 0;
-
-        const cabinOnlyRevenueStats = await Booking.aggregate([
-            {
-                $match: {
-                    isDeleted: { $ne: true },
-                    paymentStatus: 'paid',
-                    status: { $ne: 'Cancelled' },
-                    ...bookingHasCabinStayMongo
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: '$totalAmount' }
-                }
-            }
-        ]);
-        const cabinOnlyRevenueTillDate =
-            cabinOnlyRevenueStats.length > 0 ? cabinOnlyRevenueStats[0].totalRevenue : 0;
-
-        const activityOnlyRevenueStats = await Booking.aggregate([
-            {
-                $match: {
-                    isDeleted: { $ne: true },
-                    paymentStatus: 'paid',
-                    status: { $ne: 'Cancelled' },
-                    ...bookingHasActivityOnlyMongo
-                }
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalRevenue: { $sum: '$totalAmount' }
-                }
-            }
-        ]);
-        const activityOnlyRevenueTillDate =
-            activityOnlyRevenueStats.length > 0 ? activityOnlyRevenueStats[0].totalRevenue : 0;
-
-        const totalCabins = 0;
-        const activeCabins = 0;
-
-        const totalBookings = await Booking.countDocuments({ 
-            paymentStatus: 'paid',
-            status: { $ne: 'Cancelled' }
-        });
-        const cabinOnlyBookings = await Booking.countDocuments({
-            isDeleted: { $ne: true },
-            paymentStatus: 'paid',
-            status: { $ne: 'Cancelled' },
-            ...bookingHasCabinStayMongo
-        });
-        const cancelledBookings = await Booking.countDocuments({ 
-            status: 'Cancelled'
-        });
-        const cancelledCabinOnlyBookings = await Booking.countDocuments({
-            isDeleted: { $ne: true },
-            status: 'Cancelled',
-            ...bookingHasCabinStayMongo
-        });
-
-        const paymentStats = await Booking.aggregate([
-            { 
-                $match: { 
-                    paymentStatus: 'paid',
-                    status: { $ne: 'Cancelled' }
-                } 
-            },
-            {
-                $group: {
-                    _id: null,
-                    totalPayment: { $sum: '$totalAmount' },
-                    totalPaidBookings: { $sum: 1 }
-                }
-            }
-        ]);
-
-        const totalPayment = paymentStats.length > 0 ? paymentStats[0].totalPayment : 0;
-        const totalPaidBookings = paymentStats.length > 0 ? paymentStats[0].totalPaidBookings : 0;
-
-        const dashboardData = {
-            activitiesAmountCollected: parseFloat(activitiesAmountCollected.toFixed(2)),
-            completedActivitiesOnlyBookings,
-            cancelledActivitiesOnlyBookings,
-            cabinOnlyRevenueTillDate: parseFloat(cabinOnlyRevenueTillDate.toFixed(2)),
-            activityOnlyRevenueTillDate: parseFloat(activityOnlyRevenueTillDate.toFixed(2)),
-            totalCabins,
-            activeCabins,
-            totalBookings,
-            cabinOnlyBookings,
-            totalPayment: parseFloat(totalPayment.toFixed(2)),
-            cancelledBookings,
-            cancelledCabinOnlyBookings
-        };
+        const dashboardData = await fetchBookingStatisticsSummary();
 
         console.log("Dashboard statistics retrieved");
         return response.success200(res, "Dashboard statistics retrieved successfully", dashboardData);

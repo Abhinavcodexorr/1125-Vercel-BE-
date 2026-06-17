@@ -2,6 +2,8 @@
  * Admin bookings list — clear rows for cabin + room bookings.
  */
 
+const Booking = require('./bookingModel');
+
 const formatGuest = (guest = {}) => {
     const firstName = guest.firstName || '';
     const lastName = guest.lastName || '';
@@ -88,7 +90,44 @@ const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
     };
 };
 
+/** Admin dashboard / statistics — total, cancelled, confirmed paid revenue only. */
+const fetchBookingStatisticsSummary = async () => {
+    const [stats] = await Booking.aggregate([
+        { $match: { isDeleted: false } },
+        {
+            $group: {
+                _id: null,
+                totalBookings: { $sum: 1 },
+                cancelledBookings: {
+                    $sum: { $cond: [{ $eq: ['$status', 'Cancelled'] }, 1, 0] }
+                },
+                totalRevenue: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $eq: ['$paymentStatus', 'paid'] },
+                                    { $in: ['$status', ['Confirmed', 'Checked-In', 'Checked-Out']] }
+                                ]
+                            },
+                            { $ifNull: ['$totalAmount', 0] },
+                            0
+                        ]
+                    }
+                }
+            }
+        }
+    ]);
+
+    return {
+        totalBookings: stats?.totalBookings || 0,
+        cancelledBookings: stats?.cancelledBookings || 0,
+        totalRevenue: Number((stats?.totalRevenue || 0).toFixed(2))
+    };
+};
+
 module.exports = {
     formatAdminBookingRow,
-    buildFilterMessage
+    buildFilterMessage,
+    fetchBookingStatisticsSummary
 };
