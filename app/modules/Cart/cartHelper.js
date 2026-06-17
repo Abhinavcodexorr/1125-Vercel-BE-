@@ -1,8 +1,13 @@
 const mongoose = require('mongoose');
 const Room = require('../Rooms/roomModel');
-const { getAllRoomBlockingBookings } = require('../Rooms/roomAvailabilityHelper');
+const {
+    getAllRoomBlockingBookings,
+    resolveBookingQuantity,
+    computeNights,
+    toDateOnly
+} = require('../Rooms/roomAvailabilityHelper');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
-const { toDateOnly, computeNights } = require('../Rooms/roomAvailabilityHelper');
+const msg = require('./cartMessages');
 
 const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
@@ -56,12 +61,19 @@ const evaluateCartItemAvailability = async (roomId, input) => {
         return { ok: false, message: 'Room not found' };
     }
 
+    const quantityResolution = resolveBookingQuantity(room, input);
+    if (quantityResolution.invalidQuantity) {
+        return { ok: false, message: msg.QUANTITY_MIN, room, invalidQuantity: true };
+    }
+
+    const resolvedQuantity = quantityResolution.quantity;
+
     const stay = {
         checkInDate: input.checkInDate,
         checkOutDate: input.checkOutDate,
         adults: input.adults,
         children: input.children,
-        requestedQuantity: input.quantity,
+        requestedQuantity: resolvedQuantity,
         hasStayDates: true,
         validStayDates: input.checkOutDate > input.checkInDate
     };
@@ -73,7 +85,8 @@ const evaluateCartItemAvailability = async (roomId, input) => {
         ok: stayEval.isAvailable,
         room,
         stayEval,
-        message: stayEval.unavailableReason
+        message: stayEval.unavailableReason,
+        resolvedQuantity
     };
 };
 

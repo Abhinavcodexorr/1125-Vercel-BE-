@@ -73,6 +73,26 @@ const getRoomQuantity = (room) => {
     return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
 };
 
+/** Only rooms with quantity > 1 need quantity in cart / booking requests. */
+const isMultiQuantityRoom = (room) => {
+    const quantity = parseInt(room?.quantity, 10);
+    return Number.isFinite(quantity) && quantity > 1;
+};
+
+const resolveBookingQuantity = (room, { quantity, quantityProvided }) => {
+    if (!isMultiQuantityRoom(room)) {
+        return { quantity: 1, quantityProvided: false, invalidQuantity: false };
+    }
+    if (quantityProvided && (quantity == null || quantity < 1)) {
+        return { quantity: null, quantityProvided: true, invalidQuantity: true };
+    }
+    return {
+        quantity: quantityProvided ? quantity : 1,
+        quantityProvided,
+        invalidQuantity: false
+    };
+};
+
 const getBookingUnitCount = (booking) => {
     const units = parseInt(booking?.roomQuantity ?? booking?.quantity, 10);
     return Number.isFinite(units) && units > 0 ? units : 1;
@@ -334,7 +354,9 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
         }
     }
 
-    const unitsNeeded = Math.max(parseInt(requestedQuantity, 10) || 1, 1);
+    const unitsNeeded = isMultiQuantityRoom(room)
+        ? Math.max(parseInt(requestedQuantity, 10) || 1, 1)
+        : 1;
 
     if (minAvailableUnits < unitsNeeded) {
         return {
@@ -343,7 +365,9 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
             bookedUnits: maxBookedCount,
             requestedQuantity: unitsNeeded,
             available: false,
-            reason: formatRoomQuantityUnavailable(room, minAvailableUnits),
+            reason: isMultiQuantityRoom(room)
+                ? formatRoomQuantityUnavailable(room, minAvailableUnits)
+                : formatRoomNotAvailableForDates(room),
             dateKey: null
         };
     }
@@ -394,6 +418,8 @@ module.exports = {
     buildBookingCountByDate,
     getBookingUnitCount,
     getRoomQuantity,
+    isMultiQuantityRoom,
+    resolveBookingQuantity,
     getMaxConcurrentBookings,
     getStayQuantityStatus,
     isStayAvailableForQuantity,

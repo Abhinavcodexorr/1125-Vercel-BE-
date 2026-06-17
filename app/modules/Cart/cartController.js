@@ -39,11 +39,11 @@ const addToCart = async (req, res) => {
         if (!input.adults) {
             return response.error400(res, msg.ADULTS_REQUIRED);
         }
-        if (input.quantityProvided && input.quantity == null) {
-            return response.error400(res, msg.QUANTITY_MIN);
-        }
 
         const evaluation = await evaluateCartItemAvailability(roomId, input);
+        if (evaluation.invalidQuantity) {
+            return response.error400(res, msg.QUANTITY_MIN);
+        }
         if (!evaluation.ok || !evaluation.room) {
             return response.error400(res, evaluation.message || msg.ROOM_NOT_FOUND);
         }
@@ -52,12 +52,16 @@ const addToCart = async (req, res) => {
                 data: {
                     isAvailable: false,
                     availableUnits: evaluation.stayEval.availableUnits,
-                    requestedQuantity: input.quantity
+                    requestedQuantity: evaluation.resolvedQuantity
                 }
             });
         }
 
-        const cartItem = buildCartItemFromEvaluation(evaluation.room, input, evaluation.stayEval);
+        const cartItem = buildCartItemFromEvaluation(
+            evaluation.room,
+            { ...input, quantity: evaluation.resolvedQuantity },
+            evaluation.stayEval
+        );
 
         let cart = cartId ? await findCart(cartId) : null;
         if (!cart) {

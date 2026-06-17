@@ -7,7 +7,7 @@ module.exports = {
     STAY_DATES_REQUIRED: 'checkInDate and checkOutDate are required',
     STAY_DATES_INVALID: 'checkOutDate must be after checkInDate',
     ADULTS_REQUIRED: 'adults must be at least 1',
-    QUANTITY_MIN: 'quantity must be at least 1 when provided',
+    QUANTITY_MIN: 'quantity must be at least 1 when provided (only for rooms with multiple units)',
     ROOM_NOT_FOUND: 'Room not found',
     ROOM_NOT_AVAILABLE: 'Room not available for selected dates',
     ITEM_ADDED: 'Room added to cart',

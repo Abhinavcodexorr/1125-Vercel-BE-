@@ -118,11 +118,11 @@ const createRoomBooking = async (req, res) => {
             if (!input.checkInDate || !input.checkOutDate || !input.adults) {
                 return response.error400(res, 'roomId, checkInDate, checkOutDate, and adults are required');
             }
-            if (input.quantityProvided && input.quantity == null) {
-                return response.error400(res, 'quantity must be at least 1');
-            }
 
             const evaluation = await evaluateCartItemAvailability(roomId, input);
+            if (evaluation.invalidQuantity) {
+                return response.error400(res, 'quantity must be at least 1');
+            }
             if (!evaluation.ok || !evaluation.stayEval?.isAvailable) {
                 return response.error400(
                     res,
@@ -147,7 +147,7 @@ const createRoomBooking = async (req, res) => {
                 checkOutDate: input.checkOutDate,
                 adults: input.adults,
                 children: input.children,
-                quantity: input.quantity,
+                quantity: evaluation.resolvedQuantity,
                 pricePerNight: evaluation.room.price,
                 currency: evaluation.room.currency || 'GHS'
             };
