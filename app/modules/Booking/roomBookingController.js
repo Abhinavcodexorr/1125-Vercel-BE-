@@ -7,7 +7,8 @@ const {
     parseCartItemInput,
     evaluateCartItemAvailability,
     refreshCartAvailability,
-    shapeCartResponse
+    shapeCartResponse,
+    getCartItemUnavailableMessage
 } = require('../Cart/cartHelper');
 const { computeNights } = require('../Rooms/roomAvailabilityHelper');
 
@@ -95,7 +96,11 @@ const createRoomBooking = async (req, res) => {
 
             await refreshCartAvailability(cart);
             if (!cart.items.every((item) => item.isAvailable)) {
-                return response.error400(res, 'One or more cart items are not available', null, {
+                const unavailableItem = cart.items.find((item) => !item.isAvailable);
+                const unavailableMessage = unavailableItem
+                    ? await getCartItemUnavailableMessage(unavailableItem)
+                    : 'One or more cart items are not available';
+                return response.error400(res, unavailableMessage, null, {
                     data: shapeCartResponse(cart)
                 });
             }
@@ -119,7 +124,12 @@ const createRoomBooking = async (req, res) => {
 
             const evaluation = await evaluateCartItemAvailability(roomId, input);
             if (!evaluation.ok || !evaluation.stayEval?.isAvailable) {
-                return response.error400(res, evaluation.stayEval?.unavailableReason || 'Room not available');
+                return response.error400(
+                    res,
+                    evaluation.stayEval?.unavailableReason ||
+                        evaluation.message ||
+                        `${evaluation.room?.title || 'Room'} not available for selected dates`
+                );
             }
 
             const item = {

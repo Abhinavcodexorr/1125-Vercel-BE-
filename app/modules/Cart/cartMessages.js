@@ -9,7 +9,7 @@ module.exports = {
     ADULTS_REQUIRED: 'adults must be at least 1',
     QUANTITY_MIN: 'quantity must be at least 1 when provided',
     ROOM_NOT_FOUND: 'Room not found',
-    ROOM_NOT_AVAILABLE: 'Room is not available for the requested quantity and dates',
+    ROOM_NOT_AVAILABLE: 'Room not available for selected dates',
     ITEM_ADDED: 'Room added to cart',
     CART_RETRIEVED: 'Cart retrieved successfully',
     ITEM_REMOVED: 'Cart item removed',

@@ -134,6 +134,24 @@ const refreshCartAvailability = async (cart) => {
     return cart;
 };
 
+const getCartItemUnavailableMessage = async (item) => {
+    const input = {
+        checkInDate: item.checkInDate,
+        checkOutDate: item.checkOutDate,
+        adults: item.adults,
+        children: item.children,
+        quantity: item.quantity
+    };
+    const result = await evaluateCartItemAvailability(item.roomId, input);
+    return (
+        result.stayEval?.unavailableReason ||
+        result.message ||
+        (item.roomSnapshot?.title
+            ? `${item.roomSnapshot.title} not available for selected dates`
+            : 'One or more cart items are not available')
+    );
+};
+
 const shapeCartResponse = (cart) => ({
     cartId: cart.cartId,
     subTotal: cart.subTotal,
@@ -168,5 +186,6 @@ module.exports = {
     buildCartItemFromEvaluation,
     recalculateCartTotals,
     refreshCartAvailability,
+    getCartItemUnavailableMessage,
     shapeCartResponse
 };

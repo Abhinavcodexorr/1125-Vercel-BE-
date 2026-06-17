@@ -16,6 +16,7 @@ const {
 const {
     parseStayQuery,
     shapeRoomBaseForWebsite,
+    shapeStayEvalForWebsite,
     filterRoomsForStay,
     evaluateRoomStay
 } = require('./roomWebsiteHelper');
@@ -444,6 +445,7 @@ const checkRoomStayAvailability = async (req, res) => {
         const stayEval = evaluateRoomStay(room, bookings, stay);
 
         const payload = {
+            ...shapeStayEvalForWebsite(stayEval),
             roomId: room._id,
             slug: room.slug,
             name: room.title,
@@ -451,17 +453,9 @@ const checkRoomStayAvailability = async (req, res) => {
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
             children: stay.children,
-            nights: stayEval.nights,
-            quantity: stayEval.quantity,
-            requestedQuantity: stay.requestedQuantity || stayEval.requestedQuantity || 1,
-            availableUnits: stayEval.availableUnits,
-            bookedUnits: stayEval.bookedUnits,
             pricePerNight: room.price,
-            subTotal: stayEval.subTotal,
             totalAmount: stayEval.subTotal,
-            currency: room.currency || 'GHS',
-            isAvailable: stayEval.isAvailable,
-            conflictingBooking: stayEval.conflictingBooking || null
+            currency: room.currency || 'GHS'
         };
 
         if (!stayEval.isAvailable) {

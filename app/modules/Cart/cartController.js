@@ -48,7 +48,7 @@ const addToCart = async (req, res) => {
             return response.error400(res, evaluation.message || msg.ROOM_NOT_FOUND);
         }
         if (!evaluation.stayEval.isAvailable) {
-            return response.error400(res, msg.ROOM_NOT_AVAILABLE, null, {
+            return response.error400(res, evaluation.stayEval.unavailableReason || msg.ROOM_NOT_AVAILABLE, null, {
                 data: {
                     isAvailable: false,
                     availableUnits: evaluation.stayEval.availableUnits,

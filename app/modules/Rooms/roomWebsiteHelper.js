@@ -4,6 +4,7 @@ const {
     getRoomBlockedDateData,
     getStayQuantityStatus,
     getRoomQuantity,
+    getRoomDisplayName,
     computeNights,
     toDateOnly
 } = require('./roomAvailabilityHelper');
@@ -96,6 +97,7 @@ const bookingConflictsStay = (bookings, checkIn, checkOut) => {
 };
 
 const evaluateRoomStay = (room, bookings, stay) => {
+    const roomName = getRoomDisplayName(room);
     const quantity = getRoomQuantity(room);
     const blockedDatesExpanded = expandBlockedDatesPalmStyle(
         getRoomBlockedDateData(room.blockedDates || []).blocked
@@ -139,14 +141,14 @@ const evaluateRoomStay = (room, bookings, stay) => {
         return {
             ...result,
             isAvailable: false,
-            unavailableReason: `Room max capacity is ${room.guests} guests`
+            unavailableReason: `${roomName} max capacity is ${room.guests} guests`
         };
     }
     if (totalGuests > 0 && room.guests < totalGuests) {
         return {
             ...result,
             isAvailable: false,
-            unavailableReason: `Room max capacity is ${room.guests} guests`
+            unavailableReason: `${roomName} max capacity is ${room.guests} guests`
         };
     }
 
@@ -180,6 +182,17 @@ const evaluateRoomStay = (room, bookings, stay) => {
 
     return result;
 };
+
+const shapeStayEvalForWebsite = (stayEval) => ({
+    isAvailable: stayEval.isAvailable,
+    quantity: stayEval.quantity,
+    availableUnits: stayEval.availableUnits,
+    bookedUnits: stayEval.bookedUnits,
+    requestedQuantity: stayEval.requestedQuantity,
+    nights: stayEval.nights,
+    subTotal: stayEval.subTotal,
+    conflictingBooking: stayEval.conflictingBooking || null
+});
 
 const shapeRoomBaseForWebsite = (room) => {
     const currency = room.currency || 'GHS';
@@ -222,6 +235,7 @@ module.exports = {
     parseStayQuery,
     formatPrice,
     evaluateRoomStay,
+    shapeStayEvalForWebsite,
     shapeRoomBaseForWebsite,
     filterRoomsForStay,
     getAllRoomBlockingBookings,

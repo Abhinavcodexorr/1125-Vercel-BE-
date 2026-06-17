@@ -276,6 +276,14 @@ const getMaxConcurrentBookings = (bookings) => {
     return max;
 };
 
+const getRoomDisplayName = (room) => String(room?.title || room?.name || 'Room').trim();
+
+const formatRoomNotAvailableForDates = (room) =>
+    `${getRoomDisplayName(room)} not available for selected dates`;
+
+const formatRoomQuantityUnavailable = (room, availableUnits) =>
+    `${getRoomDisplayName(room)} - only ${availableUnits} unit(s) available for selected dates`;
+
 const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, requestedQuantity = 1) => {
     const quantity = getRoomQuantity(room);
     const bookingCountByDate = buildBookingCountByDate(bookings);
@@ -305,7 +313,7 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
                 availableUnits: 0,
                 bookedUnits: bookedCount,
                 available: false,
-                reason: 'Selected dates are blocked',
+                reason: formatRoomNotAvailableForDates(room),
                 dateKey
             };
         }
@@ -320,7 +328,7 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
                 availableUnits: 0,
                 bookedUnits: bookedCount,
                 available: false,
-                reason: 'All units are booked for selected dates',
+                reason: formatRoomNotAvailableForDates(room),
                 dateKey
             };
         }
@@ -335,7 +343,7 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
             bookedUnits: maxBookedCount,
             requestedQuantity: unitsNeeded,
             available: false,
-            reason: `Only ${minAvailableUnits} unit(s) available for selected dates`,
+            reason: formatRoomQuantityUnavailable(room, minAvailableUnits),
             dateKey: null
         };
     }
@@ -373,6 +381,9 @@ const validateRoomQuantityUpdate = (room, bookings, newQuantity) => {
 };
 
 module.exports = {
+    getRoomDisplayName,
+    formatRoomNotAvailableForDates,
+    formatRoomQuantityUnavailable,
     getAllRoomBlockingBookings,
     getRoomBlockingBookingsByRoomIds,
     roomBlockingBookingQuery,
