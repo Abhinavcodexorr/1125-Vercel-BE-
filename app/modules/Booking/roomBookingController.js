@@ -232,7 +232,8 @@ const createRoomBooking = async (req, res) => {
         console.error('Create room booking error:', error.message);
         const isAvailabilityError =
             /not available|Room not found|Room not available|cart items/i.test(error.message || '');
-        const isHubtelError = /Hubtel/i.test(error.message || '');
+        const isHubtelError =
+            /Hubtel|Request failed with status code|ENOTFOUND|ERR_INVALID_URL/i.test(error.message || '');
         if (isAvailabilityError || isHubtelError) {
             return response.error400(res, error.message);
         }

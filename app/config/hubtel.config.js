@@ -24,8 +24,11 @@ const joinApiPath = (segment) => {
     return `${resolveApiBaseUrl()}${withSlash}${segment.replace(/^\//, '')}`;
 };
 
-/** Hardcoded Hubtel redirect / callback URLs (override .env for these). */
-const HUBTEL_CALLBACK_URL = 'https://1125-beach-zeta.vercel.app/';
+/** Hardcoded Hubtel URLs — do not rely on Render/Vercel env (bad values caused 404 on initiate). */
+const HUBTEL_INITIATE_URL = 'https://payproxyapi.hubtel.com/items/initiate';
+const HUBTEL_STATUS_URL_BASE = 'https://api-txnstatus.hubtel.com/transactions';
+const HUBTEL_CALLBACK_URL =
+    'https://one125-vercel-be-g0yd.onrender.com/api/v1/booking/hubtel/callback';
 const HUBTEL_RETURN_URL = 'http://localhost:3001/thank-you';
 const HUBTEL_CANCELLATION_URL = 'https://1125-beach-zeta.vercel.app/';
 
@@ -39,12 +42,8 @@ const getHubtelSettings = () => {
     const callbackUrl = HUBTEL_CALLBACK_URL;
     const returnUrl = HUBTEL_RETURN_URL;
     const cancellationUrl = HUBTEL_CANCELLATION_URL;
-
-    const initiateUrl =
-        stripEnv(process.env.HUBTEL_INITIATE_URL) || 'https://payproxyapi.hubtel.com/items/initiate';
-    const statusUrlBase =
-        stripEnv(process.env.HUBTEL_STATUS_URL) ||
-        'https://api-txnstatus.hubtel.com/transactions';
+    const initiateUrl = HUBTEL_INITIATE_URL;
+    const statusUrlBase = HUBTEL_STATUS_URL_BASE;
 
     return {
         apiId,
