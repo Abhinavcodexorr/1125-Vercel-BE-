@@ -234,6 +234,12 @@ const bookingSchema = new mongoose.Schema({
     incompleteBookingEmailSent: {
         type: Boolean,
         default: false
+    },
+    /** Room booking payment hold — blocks overlapping dates until expiry or payment. */
+    holdExpiresAt: {
+        type: Date,
+        default: null,
+        index: true
     }
     
 }, {
@@ -295,6 +301,7 @@ bookingSchema.methods.getFormattedBooking = function() {
         transactionId: this.transactionId, // Included for all bookings including cancelled ones (may be null if cancelled before payment)
         paymentDate: this.paymentDate,
         cancelledAt: this.cancelledAt,
+        holdExpiresAt: this.holdExpiresAt || null,
         cancellationReason: this.cancellationReason,
         cancellationFee: this.cancellationFee,
         createdAt: this.createdAt,

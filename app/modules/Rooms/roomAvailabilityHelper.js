@@ -1,16 +1,43 @@
 const Booking = require('../Booking/bookingModel');
 
-/** Only paid, confirmed stays block room availability on the website. */
+/** Paid, confirmed stays always block availability. */
 const BLOCKING_STATUSES = ['Confirmed', 'Checked-In', 'Checked-Out'];
 const BLOCKING_PAYMENT_STATUSES = ['paid'];
 
+const getBookingHoldMinutes = () => {
+    const parsed = parseInt(process.env.ROOM_BOOKING_HOLD_MINUTES, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+};
+
+const getHoldExpiresAt = (fromDate = new Date()) => {
+    const expiresAt = new Date(fromDate);
+    expiresAt.setMinutes(expiresAt.getMinutes() + getBookingHoldMinutes());
+    return expiresAt;
+};
+
 const roomBlockingBookingQuery = (roomId) => {
+    const now = new Date();
+    const holdCutoff = new Date(now.getTime() - getBookingHoldMinutes() * 60 * 1000);
+
     const query = {
         isDeleted: false,
-        status: { $in: BLOCKING_STATUSES },
-        paymentStatus: { $in: BLOCKING_PAYMENT_STATUSES },
         checkInDate: { $exists: true, $ne: null },
-        checkOutDate: { $exists: true, $ne: null }
+        checkOutDate: { $exists: true, $ne: null },
+        $or: [
+            {
+                status: { $in: BLOCKING_STATUSES },
+                paymentStatus: { $in: BLOCKING_PAYMENT_STATUSES }
+            },
+            {
+                status: 'Pending',
+                paymentStatus: { $in: ['incomplete', 'pending'] },
+                roomId: { $exists: true, $ne: null },
+                $or: [
+                    { holdExpiresAt: { $gt: now } },
+                    { holdExpiresAt: { $exists: false }, createdAt: { $gte: holdCutoff } }
+                ]
+            }
+        ]
     };
     if (roomId) {
         query.roomId = roomId;
@@ -19,7 +46,7 @@ const roomBlockingBookingQuery = (roomId) => {
 };
 
 const BLOCKING_BOOKING_SELECT =
-    'roomId roomQuantity bookingReference checkInDate checkOutDate status paymentStatus adults children';
+    'roomId roomQuantity bookingReference checkInDate checkOutDate status paymentStatus adults children holdExpiresAt createdAt';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** How far ahead to list open dates (full array, not paginated). Override via ROOM_AVAILABILITY_DAYS in .env */
 const DEFAULT_AVAILABLE_HORIZON_DAYS =
@@ -405,6 +432,8 @@ const validateRoomQuantityUpdate = (room, bookings, newQuantity) => {
 };
 
 module.exports = {
+    getBookingHoldMinutes,
+    getHoldExpiresAt,
     getRoomDisplayName,
     formatRoomNotAvailableForDates,
     formatRoomQuantityUnavailable,

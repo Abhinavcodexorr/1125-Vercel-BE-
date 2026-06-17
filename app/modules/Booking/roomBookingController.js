@@ -10,7 +10,12 @@ const {
     shapeCartResponse,
     getCartItemUnavailableMessage
 } = require('../Cart/cartHelper');
-const { computeNights } = require('../Rooms/roomAvailabilityHelper');
+const {
+    computeNights,
+    getHoldExpiresAt,
+    getAllRoomBlockingBookings
+} = require('../Rooms/roomAvailabilityHelper');
+const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 
 const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
@@ -46,13 +51,17 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     };
 
     const evaluation = await evaluateCartItemAvailability(item.roomId, input);
-    if (!evaluation.ok || !evaluation.stayEval?.isAvailable) {
+    if (!evaluation.ok || !evaluation.room) {
+        throw new Error(evaluation.message || 'Room not found');
+    }
+    if (!evaluation.stayEval?.isAvailable) {
         throw new Error(evaluation.stayEval?.unavailableReason || evaluation.message || 'Room not available');
     }
 
     const nights = computeNights(item.checkInDate, item.checkOutDate);
     const pricePerNight = Number(item.pricePerNight || evaluation.room.price) || 0;
     const subTotal = Number((pricePerNight * nights * item.quantity).toFixed(2));
+    const holdExpiresAt = getHoldExpiresAt();
 
     const booking = new Booking({
         roomId: item.roomId,
@@ -71,10 +80,28 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         currency: item.currency || evaluation.room.currency || 'GHS',
         paymentMethod: 'Hubtel',
         status: 'Pending',
-        paymentStatus: 'incomplete'
+        paymentStatus: 'incomplete',
+        holdExpiresAt
     });
 
     await booking.save();
+
+    const stay = {
+        checkInDate: item.checkInDate,
+        checkOutDate: item.checkOutDate,
+        adults: item.adults,
+        children: item.children,
+        requestedQuantity: item.quantity,
+        hasStayDates: true,
+        validStayDates: item.checkOutDate > item.checkInDate
+    };
+    const blockingBookings = await getAllRoomBlockingBookings(item.roomId);
+    const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay);
+    if (!postSaveEval.isAvailable) {
+        await Booking.deleteOne({ _id: booking._id });
+        throw new Error(postSaveEval.unavailableReason || 'Room not available');
+    }
+
     return booking;
 };
 
@@ -198,10 +225,16 @@ const createRoomBooking = async (req, res) => {
             currency: bookings[0].currency,
             paymentMethod: 'Hubtel',
             checkoutUrl: hubtel.checkoutUrl,
+            holdExpiresAt: bookings[0].holdExpiresAt,
             bookings: bookings.map((b) => b.getFormattedBooking())
         });
     } catch (error) {
         console.error('Create room booking error:', error.message);
+        const isAvailabilityError =
+            /not available|Room not found|Room not available|cart items/i.test(error.message || '');
+        if (isAvailabilityError) {
+            return response.error400(res, error.message);
+        }
         return response.serverError500(res, 'Failed to create booking', error.message);
     }
 };
