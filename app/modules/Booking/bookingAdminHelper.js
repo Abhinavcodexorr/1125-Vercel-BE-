@@ -90,16 +90,42 @@ const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
     };
 };
 
-/** Admin dashboard / statistics — total, cancelled, confirmed paid revenue only. */
+/** Admin dashboard / statistics — confirmed+paid count, cancelled+paid count, confirmed paid revenue. */
+const CONFIRMED_PAID_STATUSES = ['Confirmed', 'Checked-In', 'Checked-Out'];
+
 const fetchBookingStatisticsSummary = async () => {
     const [stats] = await Booking.aggregate([
         { $match: { isDeleted: false } },
         {
             $group: {
                 _id: null,
-                totalBookings: { $sum: 1 },
+                totalBookings: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $eq: ['$paymentStatus', 'paid'] },
+                                    { $in: ['$status', CONFIRMED_PAID_STATUSES] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
                 cancelledBookings: {
-                    $sum: { $cond: [{ $eq: ['$status', 'Cancelled'] }, 1, 0] }
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $eq: ['$paymentStatus', 'paid'] },
+                                    { $eq: ['$status', 'Cancelled'] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
                 },
                 totalRevenue: {
                     $sum: {
@@ -107,7 +133,7 @@ const fetchBookingStatisticsSummary = async () => {
                             {
                                 $and: [
                                     { $eq: ['$paymentStatus', 'paid'] },
-                                    { $in: ['$status', ['Confirmed', 'Checked-In', 'Checked-Out']] }
+                                    { $in: ['$status', CONFIRMED_PAID_STATUSES] }
                                 ]
                             },
                             { $ifNull: ['$totalAmount', 0] },
