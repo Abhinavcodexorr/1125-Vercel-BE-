@@ -66,10 +66,10 @@ const buildStayFromCartItem = (item) => ({
     validStayDates: item.checkOutDate > item.checkInDate
 });
 
-const evaluateCartItemAvailability = async (roomId, input) => {
+const evaluateCartItemAvailability = async (roomId, input, options = {}) => {
     const room = await loadActiveRoom(roomId);
     if (!room) {
-        return { ok: false, message: 'Room not found' };
+        return { ok: false, message: msg.ROOM_NOT_FOUND };
     }
 
     const quantityResolution = resolveBookingQuantity(room, input);
@@ -90,7 +90,7 @@ const evaluateCartItemAvailability = async (roomId, input) => {
     };
 
     const bookings = await getAllRoomBlockingBookings(room._id);
-    const stayEval = evaluateRoomStay(room, bookings, stay);
+    const stayEval = evaluateRoomStay(room, bookings, stay, options);
 
     return {
         ok: stayEval.isAvailable,
@@ -137,7 +137,7 @@ const recalculateCartTotals = (cart) => {
     return cart;
 };
 
-const refreshCartAvailability = async (cart) => {
+const refreshCartAvailability = async (cart, options = {}) => {
     for (let i = 0; i < cart.items.length; i += 1) {
         const item = cart.items[i];
         const input = {
@@ -147,7 +147,7 @@ const refreshCartAvailability = async (cart) => {
             children: item.children,
             quantity: item.quantity
         };
-        const result = await evaluateCartItemAvailability(item.roomId, input);
+        const result = await evaluateCartItemAvailability(item.roomId, input, options);
         if (!result.ok || !result.room) {
             item.isAvailable = false;
             continue;
@@ -159,7 +159,7 @@ const refreshCartAvailability = async (cart) => {
     return cart;
 };
 
-const getCartItemUnavailableMessage = async (item) => {
+const getCartItemUnavailableMessage = async (item, options = {}) => {
     const input = {
         checkInDate: item.checkInDate,
         checkOutDate: item.checkOutDate,
@@ -167,12 +167,12 @@ const getCartItemUnavailableMessage = async (item) => {
         children: item.children,
         quantity: item.quantity
     };
-    const result = await evaluateCartItemAvailability(item.roomId, input);
+    const result = await evaluateCartItemAvailability(item.roomId, input, options);
     return (
         result.stayEval?.unavailableReason ||
         result.message ||
         (item.roomSnapshot?.title
-            ? `${item.roomSnapshot.title} not available for selected dates`
+            ? `${item.roomSnapshot.title} is not available for the selected dates. Please choose other dates.`
             : 'One or more cart items are not available')
     );
 };

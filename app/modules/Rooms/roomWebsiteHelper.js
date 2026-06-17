@@ -5,6 +5,7 @@ const {
     getStayQuantityStatus,
     getRoomQuantity,
     getRoomDisplayName,
+    formatRoomMaxAdultCapacity,
     computeNights,
     toDateOnly
 } = require('./roomAvailabilityHelper');
@@ -96,7 +97,7 @@ const bookingConflictsStay = (bookings, checkIn, checkOut) => {
     );
 };
 
-const evaluateRoomStay = (room, bookings, stay) => {
+const evaluateRoomStay = (room, bookings, stay, options = {}) => {
     const roomName = getRoomDisplayName(room);
     const quantity = getRoomQuantity(room);
     const blockedDatesExpanded = expandBlockedDatesPalmStyle(
@@ -137,19 +138,21 @@ const evaluateRoomStay = (room, bookings, stay) => {
     result.subTotal = (Number(room.price) || 0) * result.nights * requestedQuantity;
 
     const totalGuests = (stay.adults || 0) + (stay.children || 0);
-    if (stay.adults && room.guests < stay.adults) {
-        return {
-            ...result,
-            isAvailable: false,
-            unavailableReason: `${roomName} max capacity is ${room.guests} guests`
-        };
-    }
-    if (totalGuests > 0 && room.guests < totalGuests) {
-        return {
-            ...result,
-            isAvailable: false,
-            unavailableReason: `${roomName} max capacity is ${room.guests} guests`
-        };
+    if (!options.skipGuestCapacity) {
+        if (stay.adults && room.guests < stay.adults) {
+            return {
+                ...result,
+                isAvailable: false,
+                unavailableReason: formatRoomMaxAdultCapacity(room)
+            };
+        }
+        if (totalGuests > 0 && room.guests < totalGuests) {
+            return {
+                ...result,
+                isAvailable: false,
+                unavailableReason: formatRoomMaxAdultCapacity(room)
+            };
+        }
     }
 
     const quantityStatus = getStayQuantityStatus(

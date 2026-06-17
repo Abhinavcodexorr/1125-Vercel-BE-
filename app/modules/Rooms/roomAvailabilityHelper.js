@@ -326,10 +326,13 @@ const getMaxConcurrentBookings = (bookings) => {
 const getRoomDisplayName = (room) => String(room?.title || room?.name || 'Room').trim();
 
 const formatRoomNotAvailableForDates = (room) =>
-    `${getRoomDisplayName(room)} not available for selected dates`;
+    `${getRoomDisplayName(room)} is not available for the selected dates. Please choose other dates.`;
 
 const formatRoomQuantityUnavailable = (room, availableUnits) =>
-    `${getRoomDisplayName(room)} - only ${availableUnits} unit(s) available for selected dates`;
+    `Only ${availableUnits} unit(s) available for the selected dates`;
+
+const formatRoomMaxAdultCapacity = (room) =>
+    `Max. allowed capacity is ${room.guests} Adults`;
 
 const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, requestedQuantity = 1) => {
     const quantity = getRoomQuantity(room);
@@ -437,6 +440,7 @@ module.exports = {
     getRoomDisplayName,
     formatRoomNotAvailableForDates,
     formatRoomQuantityUnavailable,
+    formatRoomMaxAdultCapacity,
     getAllRoomBlockingBookings,
     getRoomBlockingBookingsByRoomIds,
     roomBlockingBookingQuery,

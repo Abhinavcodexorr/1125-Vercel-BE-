@@ -57,7 +57,8 @@ const withHoldEval = evaluateRoomStay(room, [personA], personBStay);
 assert('Active hold blocks overlapping booking', withHoldEval.isAvailable === false);
 assert(
     'Hold error uses room name',
-    withHoldEval.unavailableReason === 'Super Deluxe not available for selected dates'
+    withHoldEval.unavailableReason ===
+        'Super Deluxe is not available for the selected dates. Please choose other dates.'
 );
 
 // Non-overlapping dates should still work

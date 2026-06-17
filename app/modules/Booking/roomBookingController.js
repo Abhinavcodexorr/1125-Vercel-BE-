@@ -10,11 +10,8 @@ const {
     shapeCartResponse,
     getCartItemUnavailableMessage
 } = require('../Cart/cartHelper');
-const {
-    computeNights,
-    getHoldExpiresAt,
-    getAllRoomBlockingBookings
-} = require('../Rooms/roomAvailabilityHelper');
+const { formatRoomNotAvailableForDates, getHoldExpiresAt, getAllRoomBlockingBookings, computeNights } = require('../Rooms/roomAvailabilityHelper');
+const msg = require('../Cart/cartMessages');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 
 const isObjectId = (value) =>
@@ -50,12 +47,16 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         quantity: item.quantity
     };
 
-    const evaluation = await evaluateCartItemAvailability(item.roomId, input);
+    const evaluation = await evaluateCartItemAvailability(item.roomId, input, { skipGuestCapacity: true });
     if (!evaluation.ok || !evaluation.room) {
-        throw new Error(evaluation.message || 'Room not found');
+        throw new Error(evaluation.message || msg.ROOM_NOT_FOUND);
     }
     if (!evaluation.stayEval?.isAvailable) {
-        throw new Error(evaluation.stayEval?.unavailableReason || evaluation.message || 'Room not available');
+        throw new Error(
+            evaluation.stayEval?.unavailableReason ||
+                evaluation.message ||
+                formatRoomNotAvailableForDates(evaluation.room)
+        );
     }
 
     const nights = computeNights(item.checkInDate, item.checkOutDate);
@@ -96,10 +97,10 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         validStayDates: item.checkOutDate > item.checkInDate
     };
     const blockingBookings = await getAllRoomBlockingBookings(item.roomId);
-    const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay);
+    const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay, { skipGuestCapacity: true });
     if (!postSaveEval.isAvailable) {
         await Booking.deleteOne({ _id: booking._id });
-        throw new Error(postSaveEval.unavailableReason || 'Room not available');
+        throw new Error(postSaveEval.unavailableReason || formatRoomNotAvailableForDates(evaluation.room));
     }
 
     return booking;
@@ -121,11 +122,11 @@ const createRoomBooking = async (req, res) => {
                 return response.error400(res, 'Cart is empty or not found');
             }
 
-            await refreshCartAvailability(cart);
+            await refreshCartAvailability(cart, { skipGuestCapacity: true });
             if (!cart.items.every((item) => item.isAvailable)) {
                 const unavailableItem = cart.items.find((item) => !item.isAvailable);
                 const unavailableMessage = unavailableItem
-                    ? await getCartItemUnavailableMessage(unavailableItem)
+                    ? await getCartItemUnavailableMessage(unavailableItem, { skipGuestCapacity: true })
                     : 'One or more cart items are not available';
                 return response.error400(res, unavailableMessage, null, {
                     data: shapeCartResponse(cart)
@@ -142,20 +143,16 @@ const createRoomBooking = async (req, res) => {
             await cart.save();
         } else if (roomId) {
             const input = parseCartItemInput(req.body);
-            if (!input.checkInDate || !input.checkOutDate || !input.adults) {
-                return response.error400(res, 'roomId, checkInDate, checkOutDate, and adults are required');
-            }
 
-            const evaluation = await evaluateCartItemAvailability(roomId, input);
-            if (evaluation.invalidQuantity) {
-                return response.error400(res, 'quantity must be at least 1');
-            }
+            const evaluation = await evaluateCartItemAvailability(roomId, input, { skipGuestCapacity: true });
             if (!evaluation.ok || !evaluation.stayEval?.isAvailable) {
                 return response.error400(
                     res,
                     evaluation.stayEval?.unavailableReason ||
                         evaluation.message ||
-                        `${evaluation.room?.title || 'Room'} not available for selected dates`
+                        (evaluation.room
+                            ? formatRoomNotAvailableForDates(evaluation.room)
+                            : msg.ROOM_NOT_FOUND)
                 );
             }
 
@@ -182,7 +179,7 @@ const createRoomBooking = async (req, res) => {
             const booking = await createBookingFromCartItem(item, guest, null);
             bookings.push(booking);
         } else {
-            return response.error400(res, 'cartId or roomId is required');
+            return response.error400(res, msg.CART_ID_REQUIRED);
         }
 
         const totalAmount = bookings.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
@@ -231,13 +228,15 @@ const createRoomBooking = async (req, res) => {
     } catch (error) {
         console.error('Create room booking error:', error.message);
         const isAvailabilityError =
-            /not available|Room not found|Room not available|cart items/i.test(error.message || '');
+            /not available for the selected dates|unit\(s\) available for the selected dates|This room is not available|cart items/i.test(
+                error.message || ''
+            );
         const isHubtelError =
             /Hubtel|Request failed with status code|ENOTFOUND|ERR_INVALID_URL/i.test(error.message || '');
         if (isAvailabilityError || isHubtelError) {
             return response.error400(res, error.message);
         }
-        return response.serverError500(res, 'Failed to create booking', error.message);
+        return response.serverError500(res, msg.NETWORK_ERROR, error.message);
     }
 };
 

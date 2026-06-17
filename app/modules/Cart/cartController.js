@@ -81,7 +81,7 @@ const addToCart = async (req, res) => {
         return response.created201(res, msg.ITEM_ADDED, { cartId: cart.cartId });
     } catch (error) {
         console.error('Add to cart error:', error.message);
-        return response.serverError500(res, 'Failed to add item to cart', error.message);
+        return response.serverError500(res, msg.NETWORK_ERROR, error.message);
     }
 };
 
@@ -98,7 +98,7 @@ const getCart = async (req, res) => {
         return response.success200(res, msg.CART_RETRIEVED, shapeCartResponse(cart));
     } catch (error) {
         console.error('Get cart error:', error.message);
-        return response.serverError500(res, 'Failed to retrieve cart', error.message);
+        return response.serverError500(res, msg.NETWORK_ERROR, error.message);
     }
 };
 
@@ -123,7 +123,7 @@ const checkCartAvailability = async (req, res) => {
         return response.success200(res, msg.AVAILABILITY_CHECKED, shaped);
     } catch (error) {
         console.error('Check cart availability error:', error.message);
-        return response.serverError500(res, 'Failed to check cart availability', error.message);
+        return response.serverError500(res, msg.NETWORK_ERROR, error.message);
     }
 };
 
@@ -147,7 +147,7 @@ const removeCartItem = async (req, res) => {
         return response.success200(res, msg.ITEM_REMOVED, shapeCartResponse(cart));
     } catch (error) {
         console.error('Remove cart item error:', error.message);
-        return response.serverError500(res, 'Failed to remove cart item', error.message);
+        return response.serverError500(res, msg.NETWORK_ERROR, error.message);
     }
 };
 
@@ -165,7 +165,7 @@ const clearCart = async (req, res) => {
         return response.success200(res, msg.CART_CLEARED, shapeCartResponse(cart));
     } catch (error) {
         console.error('Clear cart error:', error.message);
-        return response.serverError500(res, 'Failed to clear cart', error.message);
+        return response.serverError500(res, msg.NETWORK_ERROR, error.message);
     }
 };
 
