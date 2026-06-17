@@ -10,7 +10,18 @@ const cartItemSchema = new mongoose.Schema(
             price: { type: Number, min: 0 },
             currency: { type: String, trim: true, default: 'GHS' },
             guests: { type: Number, min: 1 },
-            quantity: { type: Number, min: 1 }
+            quantity: { type: Number, min: 1 },
+            images: {
+                type: [
+                    {
+                        _id: { type: mongoose.Schema.Types.ObjectId },
+                        url: { type: String, trim: true },
+                        alt: { type: String, trim: true, default: '' },
+                        order: { type: Number, default: 0 }
+                    }
+                ],
+                default: []
+            }
         },
         checkInDate: { type: Date, required: true },
         checkOutDate: { type: Date, required: true },

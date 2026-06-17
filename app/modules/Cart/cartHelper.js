@@ -45,6 +45,17 @@ const parseCartItemInput = (body) => {
 const loadActiveRoom = async (roomId) =>
     Room.findOne({ _id: roomId, isDeleted: false, isActive: true }).lean();
 
+const shapeRoomImagesForSnapshot = (room) =>
+    (room.images || [])
+        .filter((img) => img && String(img.url || '').trim())
+        .map((img, index) => ({
+            _id: img._id,
+            url: String(img.url).trim(),
+            alt: room.title || '',
+            order: Number.isFinite(Number(img.order)) ? Number(img.order) : index
+        }))
+        .sort((a, b) => a.order - b.order);
+
 const buildStayFromCartItem = (item) => ({
     checkInDate: item.checkInDate,
     checkOutDate: item.checkOutDate,
@@ -103,7 +114,8 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
             price: pricePerNight,
             currency: room.currency || 'GHS',
             guests: room.guests,
-            quantity: room.quantity || 1
+            quantity: room.quantity || 1,
+            images: shapeRoomImagesForSnapshot(room)
         },
         checkInDate: input.checkInDate,
         checkOutDate: input.checkOutDate,
