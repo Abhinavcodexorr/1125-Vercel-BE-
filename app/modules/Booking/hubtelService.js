@@ -37,7 +37,8 @@ const initiateCheckout = async ({
         payload.customerPhoneNumber = String(customerPhoneNumber).replace(/\s+/g, '');
     }
 
-    const response = await axios.post(config.initiateUrl, payload, {
+    try {
+        const response = await axios.post(config.initiateUrl, payload, {
         headers: {
             Authorization: getAuthHeader(),
             'Content-Type': 'application/json'
@@ -46,6 +47,18 @@ const initiateCheckout = async ({
     });
 
     const data = response.data?.data || response.data;
+    const responseCode = String(response.data?.responseCode || data?.responseCode || '');
+    const hubtelStatus = String(response.data?.status || data?.status || '').toLowerCase();
+
+    if (responseCode && responseCode !== '0000' && hubtelStatus !== 'success') {
+        const hubtelMessage =
+            response.data?.message ||
+            data?.message ||
+            response.data?.status ||
+            'Hubtel checkout initiation failed';
+        throw new Error(hubtelMessage);
+    }
+
     const checkoutUrl =
         data?.checkoutUrl ||
         data?.checkoutDirectUrl ||
@@ -61,6 +74,24 @@ const initiateCheckout = async ({
         checkoutUrl,
         raw: response.data
     };
+    } catch (error) {
+        if (error.response?.data) {
+            const body = error.response.data;
+            const message =
+                body.message ||
+                body.Message ||
+                body.status ||
+                body.error ||
+                JSON.stringify(body);
+            throw new Error(`Hubtel payment error: ${message}`);
+        }
+        if (error.code === 'ENOTFOUND' || error.code === 'ERR_INVALID_URL') {
+            throw new Error(
+                `Hubtel payment error: invalid API URL (${config.initiateUrl}). Check HUBTEL_INITIATE_URL in .env`
+            );
+        }
+        throw error;
+    }
 };
 
 const verifyTransaction = async (clientReference) => {

@@ -2,7 +2,10 @@ require('dotenv').config();
 
 const stripEnv = (value) => {
     if (value == null) return '';
-    return String(value).replace(/^['"]|['"]$/g, '').trim();
+    return String(value)
+        .replace(/^['"]|['"]$/g, '')
+        .replace(/;+\s*$/g, '')
+        .trim();
 };
 
 /** Public API base used for Hubtel callback / return URLs (no trailing slash). */
@@ -21,6 +24,11 @@ const joinApiPath = (segment) => {
     return `${resolveApiBaseUrl()}${withSlash}${segment.replace(/^\//, '')}`;
 };
 
+/** Hardcoded Hubtel redirect / callback URLs (override .env for these). */
+const HUBTEL_CALLBACK_URL = 'https://1125-beach-zeta.vercel.app/';
+const HUBTEL_RETURN_URL = 'http://localhost:3001/thank-you';
+const HUBTEL_CANCELLATION_URL = 'https://1125-beach-zeta.vercel.app/';
+
 const getHubtelSettings = () => {
     const apiId = stripEnv(process.env.HUBTEL_API_ID || process.env.HUBTEL_CLIENT_ID);
     const apiKey = stripEnv(process.env.HUBTEL_API_KEY || process.env.HUBTEL_CLIENT_SECRET);
@@ -28,11 +36,9 @@ const getHubtelSettings = () => {
         process.env.HUBTEL_MERCHANT_ACCOUNT_NUMBER || process.env.HUBTEL_MERCHANT_ACCOUNT
     );
 
-    const callbackUrl =
-        stripEnv(process.env.HUBTEL_CALLBACK_URL) || joinApiPath('booking/hubtel/callback');
-    const returnUrl = stripEnv(process.env.HUBTEL_RETURN_URL) || joinApiPath('booking/confirm');
-    const cancellationUrl =
-        stripEnv(process.env.HUBTEL_CANCELLATION_URL) || returnUrl;
+    const callbackUrl = HUBTEL_CALLBACK_URL;
+    const returnUrl = HUBTEL_RETURN_URL;
+    const cancellationUrl = HUBTEL_CANCELLATION_URL;
 
     const initiateUrl =
         stripEnv(process.env.HUBTEL_INITIATE_URL) || 'https://payproxyapi.hubtel.com/items/initiate';
