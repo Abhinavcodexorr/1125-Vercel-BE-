@@ -6,6 +6,8 @@ const {
     getRoomQuantity,
     getRoomDisplayName,
     formatRoomMaxAdultCapacity,
+    formatDateKey,
+    isMultiQuantityRoom,
     computeNights,
     toDateOnly
 } = require('./roomAvailabilityHelper');
@@ -194,8 +196,46 @@ const shapeStayEvalForWebsite = (stayEval) => ({
     requestedQuantity: stayEval.requestedQuantity,
     nights: stayEval.nights,
     subTotal: stayEval.subTotal,
-    conflictingBooking: stayEval.conflictingBooking || null
+    conflictingBooking: stayEval.conflictingBooking || null,
+    unavailableReason: stayEval.unavailableReason || null
 });
+
+const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
+    const shaped = shapeRoomBaseForWebsite(room);
+    if (!stay.hasStayDates) {
+        return shaped;
+    }
+
+    if (!stay.validStayDates) {
+        return {
+            ...shaped,
+            availability: {
+                isAvailable: false,
+                unavailableReason: 'checkOutDate must be after checkInDate'
+            }
+        };
+    }
+
+    const availability = shapeStayEvalForWebsite(stayEval);
+    const showQuantityPicker = isMultiQuantityRoom(room);
+
+    return {
+        ...shaped,
+        availability: {
+            ...availability,
+            checkInDate: formatDateKey(stay.checkInDate),
+            checkOutDate: formatDateKey(stay.checkOutDate),
+            adults: stay.adults,
+            children: stay.children,
+            showQuantityPicker,
+            maxSelectableQuantity: showQuantityPicker
+                ? availability.isAvailable
+                    ? availability.availableUnits
+                    : 0
+                : 1
+        }
+    };
+};
 
 const shapeRoomBaseForWebsite = (room) => {
     const currency = room.currency || 'GHS';
@@ -239,6 +279,7 @@ module.exports = {
     formatPrice,
     evaluateRoomStay,
     shapeStayEvalForWebsite,
+    attachStayAvailabilityToRoom,
     shapeRoomBaseForWebsite,
     filterRoomsForStay,
     getAllRoomBlockingBookings,

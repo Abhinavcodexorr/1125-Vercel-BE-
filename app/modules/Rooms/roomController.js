@@ -17,6 +17,7 @@ const {
     parseStayQuery,
     shapeRoomBaseForWebsite,
     shapeStayEvalForWebsite,
+    attachStayAvailabilityToRoom,
     filterRoomsForStay,
     evaluateRoomStay
 } = require('./roomWebsiteHelper');
@@ -391,7 +392,9 @@ const getRoomsForWebsite = async (req, res) => {
 
         const totalItems = shaped.length;
         const start = (stay.page - 1) * stay.limit;
-        const paginated = shaped.slice(start, start + stay.limit).map(({ room }) => room);
+        const paginated = shaped
+            .slice(start, start + stay.limit)
+            .map(({ room, stayEval }) => attachStayAvailabilityToRoom(room, stay, stayEval));
 
         return res.status(200).json({
             success: true,
@@ -408,15 +411,27 @@ const getRoomsForWebsite = async (req, res) => {
 
 const getRoomByIdForWebsite = async (req, res) => {
     try {
+        const stay = parseStayQuery(req.query);
         const room = await Room.findOne(buildRoomLookup(req.params.id, { isActive: true })).lean();
 
         if (!room) {
             return response.notFound404(res, msg.ROOM_NOT_FOUND);
         }
 
+        if (stay.hasStayDates && !stay.validStayDates) {
+            return response.error400(res, msg.STAY_DATES_INVALID);
+        }
+
+        let data = shapeRoomBaseForWebsite(room);
+        if (stay.hasStayDates && stay.validStayDates) {
+            const bookings = await getAllRoomBlockingBookings(room._id);
+            const stayEval = evaluateRoomStay(room, bookings, stay);
+            data = attachStayAvailabilityToRoom(room, stay, stayEval);
+        }
+
         return res.status(200).json({
             success: true,
-            data: shapeRoomBaseForWebsite(room)
+            data
         });
     } catch (error) {
         console.error('Get website room error:', error.message);
@@ -461,7 +476,12 @@ const checkRoomStayAvailability = async (req, res) => {
         };
 
         if (!stayEval.isAvailable) {
-            return response.error400(res, msg.ROOM_NOT_AVAILABLE, null, { data: payload });
+            return response.error400(
+                res,
+                stayEval.unavailableReason || msg.ROOM_NOT_AVAILABLE,
+                null,
+                { data: payload }
+            );
         }
 
         return response.success200(res, msg.ROOM_AVAILABLE_FOR_STAY, payload);

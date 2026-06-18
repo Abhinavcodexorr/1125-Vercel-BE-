@@ -121,7 +121,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
         checkOutDate: input.checkOutDate,
         adults: input.adults,
         children: input.children,
-        quantity: input.quantity,
+        quantity: stayEval.requestedQuantity || input.quantity || 1,
         nights,
         pricePerNight,
         subTotal: stayEval.subTotal,
