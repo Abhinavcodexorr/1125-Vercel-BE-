@@ -139,24 +139,6 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
     result.nights = computeNights(stay.checkInDate, stay.checkOutDate);
     result.subTotal = (Number(room.price) || 0) * result.nights * requestedQuantity;
 
-    const totalGuests = (stay.adults || 0) + (stay.children || 0);
-    if (!options.skipGuestCapacity) {
-        if (stay.adults && room.guests < stay.adults) {
-            return {
-                ...result,
-                isAvailable: false,
-                unavailableReason: formatRoomMaxAdultCapacity(room)
-            };
-        }
-        if (totalGuests > 0 && room.guests < totalGuests) {
-            return {
-                ...result,
-                isAvailable: false,
-                unavailableReason: formatRoomMaxAdultCapacity(room)
-            };
-        }
-    }
-
     const quantityStatus = getStayQuantityStatus(
         room,
         bookings,
@@ -169,12 +151,33 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
     result.bookedUnits = quantityStatus.bookedUnits;
     result.requestedQuantity = quantityStatus.requestedQuantity || requestedQuantity;
 
+    const totalGuests = (stay.adults || 0) + (stay.children || 0);
+    if (!options.skipGuestCapacity) {
+        if (stay.adults && room.guests < stay.adults) {
+            return {
+                ...result,
+                isAvailable: false,
+                unavailableReason: formatRoomMaxAdultCapacity(room),
+                failureType: 'capacity'
+            };
+        }
+        if (totalGuests > 0 && room.guests < totalGuests) {
+            return {
+                ...result,
+                isAvailable: false,
+                unavailableReason: formatRoomMaxAdultCapacity(room),
+                failureType: 'capacity'
+            };
+        }
+    }
+
     if (!quantityStatus.available) {
         const bookingConflict = bookingConflictsStay(bookings, stay.checkInDate, stay.checkOutDate);
         return {
             ...result,
             isAvailable: false,
             unavailableReason: quantityStatus.reason,
+            failureType: 'quantity',
             conflictingBooking: bookingConflict
                 ? {
                       bookingReference: bookingConflict.bookingReference,
@@ -185,7 +188,7 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
         };
     }
 
-    return result;
+    return { ...result, failureType: null };
 };
 
 const shapeStayEvalForWebsite = (stayEval) => ({
@@ -197,7 +200,8 @@ const shapeStayEvalForWebsite = (stayEval) => ({
     nights: stayEval.nights,
     subTotal: stayEval.subTotal,
     conflictingBooking: stayEval.conflictingBooking || null,
-    unavailableReason: stayEval.unavailableReason || null
+    unavailableReason: stayEval.unavailableReason || null,
+    failureType: stayEval.failureType || null
 });
 
 const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
@@ -227,12 +231,9 @@ const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
             children: stay.children,
+            maxAdults: room.guests,
             showQuantityPicker,
-            maxSelectableQuantity: showQuantityPicker
-                ? availability.isAvailable
-                    ? availability.availableUnits
-                    : 0
-                : 1
+            maxSelectableQuantity: showQuantityPicker ? availability.availableUnits : 1
         }
     };
 };
