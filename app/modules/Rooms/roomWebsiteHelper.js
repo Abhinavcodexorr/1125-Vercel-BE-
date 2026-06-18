@@ -243,7 +243,8 @@ const shapeRoomBaseForWebsite = (room) => {
     return {
         _id: room._id,
         name: room.title,
-        title: room.type,
+        title: room.title,
+        type: room.type,
         slug: room.slug,
         description: room.description || '',
         size: room.size,
