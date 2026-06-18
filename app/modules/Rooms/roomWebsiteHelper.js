@@ -5,9 +5,11 @@ const {
     getStayQuantityStatus,
     getRoomQuantity,
     getRoomDisplayName,
-    formatRoomMaxAdultCapacity,
-    formatDateKey,
+    formatRoomMaxGuestCapacity,
+    getMaxGuestsForStay,
+    getCapacityUnitsForStay,
     isMultiQuantityRoom,
+    formatDateKey,
     computeNights,
     toDateOnly
 } = require('./roomAvailabilityHelper');
@@ -152,23 +154,17 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
     result.requestedQuantity = quantityStatus.requestedQuantity || requestedQuantity;
 
     const totalGuests = (stay.adults || 0) + (stay.children || 0);
-    if (!options.skipGuestCapacity) {
-        if (stay.adults && room.guests < stay.adults) {
-            return {
-                ...result,
-                isAvailable: false,
-                unavailableReason: formatRoomMaxAdultCapacity(room),
-                failureType: 'capacity'
-            };
-        }
-        if (totalGuests > 0 && room.guests < totalGuests) {
-            return {
-                ...result,
-                isAvailable: false,
-                unavailableReason: formatRoomMaxAdultCapacity(room),
-                failureType: 'capacity'
-            };
-        }
+    const maxTotalGuests = getMaxGuestsForStay(room, result.requestedQuantity);
+    result.maxTotalGuests = maxTotalGuests;
+    result.maxGuestsPerChalet = Math.max(parseInt(room.guests, 10) || 1, 1);
+
+    if (!options.skipGuestCapacity && totalGuests > 0 && totalGuests > maxTotalGuests) {
+        return {
+            ...result,
+            isAvailable: false,
+            unavailableReason: formatRoomMaxGuestCapacity(room, result.requestedQuantity),
+            failureType: 'capacity'
+        };
     }
 
     if (!quantityStatus.available) {
@@ -197,6 +193,8 @@ const shapeStayEvalForWebsite = (stayEval) => ({
     availableUnits: stayEval.availableUnits,
     bookedUnits: stayEval.bookedUnits,
     requestedQuantity: stayEval.requestedQuantity,
+    maxGuestsPerChalet: stayEval.maxGuestsPerChalet ?? null,
+    maxTotalGuests: stayEval.maxTotalGuests ?? null,
     nights: stayEval.nights,
     subTotal: stayEval.subTotal,
     conflictingBooking: stayEval.conflictingBooking || null,
@@ -231,7 +229,8 @@ const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
             children: stay.children,
-            maxAdults: room.guests,
+            maxGuestsPerChalet: room.guests,
+            maxTotalGuests: getMaxGuestsForStay(room, availability.requestedQuantity || 1),
             showQuantityPicker,
             maxSelectableQuantity: showQuantityPicker ? availability.availableUnits : 1
         }
@@ -271,8 +270,17 @@ const shapeRoomBaseForWebsite = (room) => {
 };
 
 const filterRoomsForStay = (rooms, stay) => {
-    if (!stay.adults) return rooms;
-    return rooms.filter((room) => room.guests >= stay.adults);
+    const totalGuests = (stay.adults || 0) + (stay.children || 0);
+    if (!totalGuests) return rooms;
+
+    return rooms.filter((room) => {
+        const unitsForCapacity = stay.requestedQuantity
+            ? stay.requestedQuantity
+            : isMultiQuantityRoom(room)
+              ? getRoomQuantity(room)
+              : 1;
+        return getMaxGuestsForStay(room, unitsForCapacity) >= totalGuests;
+    });
 };
 
 module.exports = {

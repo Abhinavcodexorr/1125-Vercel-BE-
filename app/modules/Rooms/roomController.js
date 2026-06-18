@@ -359,7 +359,7 @@ const getRoomsForWebsite = async (req, res) => {
         const filter = { isDeleted: false, isActive: true };
         let rooms = await Room.find(filter).sort({ createdAt: 1, _id: 1 }).lean();
 
-        if (stay.adults) {
+        if (stay.adults || stay.children) {
             rooms = filterRoomsForStay(rooms, stay);
         }
 

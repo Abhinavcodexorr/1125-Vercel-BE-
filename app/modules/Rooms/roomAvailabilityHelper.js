@@ -331,8 +331,28 @@ const formatRoomNotAvailableForDates = (room) =>
 const formatRoomQuantityUnavailable = (room, availableUnits) =>
     `Only ${availableUnits} unit(s) available for the selected dates`;
 
-const formatRoomMaxAdultCapacity = (room) =>
-    `Max. allowed capacity is ${room.guests} Adults`;
+const formatRoomMaxGuestCapacity = (room, requestedQuantity = 1) => {
+    const perUnit = Math.max(parseInt(room?.guests, 10) || 1, 1);
+    const units = isMultiQuantityRoom(room)
+        ? Math.max(parseInt(requestedQuantity, 10) || 1, 1)
+        : 1;
+    const maxTotal = perUnit * units;
+    if (units > 1) {
+        return `Max. allowed capacity is ${maxTotal} Guests (${units} chalet(s) × ${perUnit} each)`;
+    }
+    return `Max. allowed capacity is ${maxTotal} Adults`;
+};
+
+const formatRoomMaxAdultCapacity = (room, requestedQuantity = 1) =>
+    formatRoomMaxGuestCapacity(room, requestedQuantity);
+
+const getCapacityUnitsForStay = (room, requestedQuantity = 1) =>
+    isMultiQuantityRoom(room) ? Math.max(parseInt(requestedQuantity, 10) || 1, 1) : 1;
+
+const getMaxGuestsForStay = (room, requestedQuantity = 1) => {
+    const perUnit = Math.max(parseInt(room?.guests, 10) || 1, 1);
+    return perUnit * getCapacityUnitsForStay(room, requestedQuantity);
+};
 
 const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, requestedQuantity = 1) => {
     const quantity = getRoomQuantity(room);
@@ -441,6 +461,9 @@ module.exports = {
     formatRoomNotAvailableForDates,
     formatRoomQuantityUnavailable,
     formatRoomMaxAdultCapacity,
+    formatRoomMaxGuestCapacity,
+    getCapacityUnitsForStay,
+    getMaxGuestsForStay,
     getAllRoomBlockingBookings,
     getRoomBlockingBookingsByRoomIds,
     roomBlockingBookingQuery,

@@ -47,7 +47,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         quantity: item.quantity
     };
 
-    const evaluation = await evaluateCartItemAvailability(item.roomId, input, { skipGuestCapacity: true });
+    const evaluation = await evaluateCartItemAvailability(item.roomId, input);
     if (!evaluation.ok || !evaluation.room) {
         throw new Error(evaluation.message || msg.ROOM_NOT_FOUND);
     }
@@ -97,7 +97,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         validStayDates: item.checkOutDate > item.checkInDate
     };
     const blockingBookings = await getAllRoomBlockingBookings(item.roomId);
-    const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay, { skipGuestCapacity: true });
+    const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay);
     if (!postSaveEval.isAvailable) {
         await Booking.deleteOne({ _id: booking._id });
         throw new Error(postSaveEval.unavailableReason || formatRoomNotAvailableForDates(evaluation.room));
@@ -122,11 +122,11 @@ const createRoomBooking = async (req, res) => {
                 return response.error400(res, 'Cart is empty or not found');
             }
 
-            await refreshCartAvailability(cart, { skipGuestCapacity: true });
+            await refreshCartAvailability(cart);
             if (!cart.items.every((item) => item.isAvailable)) {
                 const unavailableItem = cart.items.find((item) => !item.isAvailable);
                 const unavailableMessage = unavailableItem
-                    ? await getCartItemUnavailableMessage(unavailableItem, { skipGuestCapacity: true })
+                    ? await getCartItemUnavailableMessage(unavailableItem)
                     : 'One or more cart items are not available';
                 return response.error400(res, unavailableMessage, null, {
                     data: shapeCartResponse(cart)
@@ -144,7 +144,7 @@ const createRoomBooking = async (req, res) => {
         } else if (roomId) {
             const input = parseCartItemInput(req.body);
 
-            const evaluation = await evaluateCartItemAvailability(roomId, input, { skipGuestCapacity: true });
+            const evaluation = await evaluateCartItemAvailability(roomId, input);
             if (!evaluation.ok || !evaluation.stayEval?.isAvailable) {
                 return response.error400(
                     res,
@@ -228,7 +228,7 @@ const createRoomBooking = async (req, res) => {
     } catch (error) {
         console.error('Create room booking error:', error.message);
         const isAvailabilityError =
-            /not available for the selected dates|unit\(s\) available for the selected dates|This room is not available|cart items/i.test(
+            /not available for the selected dates|unit\(s\) available for the selected dates|This room is not available|Max\. allowed capacity|cart items/i.test(
                 error.message || ''
             );
         const isHubtelError =
