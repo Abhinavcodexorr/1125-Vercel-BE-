@@ -67,8 +67,15 @@ const getHubtelConfigErrors = (config) => {
     return missing;
 };
 
+/** Set HUBTEL_ENABLED=true in .env when ready to accept live payments. */
+const isHubtelEnabled = () => {
+    const flag = stripEnv(process.env.HUBTEL_ENABLED).toLowerCase();
+    return flag === 'true' || flag === '1' || flag === 'yes';
+};
+
 module.exports = {
     resolveApiBaseUrl,
     getHubtelSettings,
-    getHubtelConfigErrors
+    getHubtelConfigErrors,
+    isHubtelEnabled
 };

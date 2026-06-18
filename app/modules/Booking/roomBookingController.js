@@ -3,6 +3,7 @@ const Booking = require('./bookingModel');
 const Cart = require('../Cart/cartModel');
 const response = require('../../helper/response');
 const hubtelService = require('./hubtelService');
+const { isHubtelEnabled } = require('../../config/hubtel.config');
 const {
     parseCartItemInput,
     evaluateCartItemAvailability,
@@ -106,8 +107,14 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     return booking;
 };
 
+const PAYMENT_GATEWAY_INACTIVE = 'Payment gateway not activated yet.';
+
 const createRoomBooking = async (req, res) => {
     try {
+        if (!isHubtelEnabled()) {
+            return response.error400(res, PAYMENT_GATEWAY_INACTIVE);
+        }
+
         const { cartId, guestDetails, roomId } = req.body;
         const guest = buildGuestDetails(guestDetails);
         if (!guest || !guest.mobileNumber) {
