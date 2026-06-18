@@ -356,7 +356,7 @@ const getRoomsForWebsite = async (req, res) => {
         }
 
         const filter = { isDeleted: false, isActive: true };
-        let rooms = await Room.find(filter).sort({ createdAt: -1 }).lean();
+        let rooms = await Room.find(filter).sort({ createdAt: -1, _id: -1 }).lean();
 
         if (stay.adults) {
             rooms = filterRoomsForStay(rooms, stay);
@@ -375,7 +375,7 @@ const getRoomsForWebsite = async (req, res) => {
         let shaped = rooms.map((room) => {
             const bookings = bookingsByRoom[String(room._id)] || [];
             const stayEval = evaluateRoomStay(room, bookings, stay);
-            return { room: shapeRoomBaseForWebsite(room), stayEval };
+            return { room: shapeRoomBaseForWebsite(room), stayEval, createdAt: room.createdAt };
         });
 
         if (stay.hasStayDates && stay.validStayDates) {
@@ -386,6 +386,8 @@ const getRoomsForWebsite = async (req, res) => {
                 );
             }
         }
+
+        shaped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
         const totalItems = shaped.length;
         const start = (stay.page - 1) * stay.limit;
