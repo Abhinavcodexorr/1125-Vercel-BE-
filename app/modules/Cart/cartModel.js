@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeCartCurrencyFields } = require('../../helper/currencyHelper');
 
 const cartItemSchema = new mongoose.Schema(
     {
@@ -49,5 +50,10 @@ const cartSchema = new mongoose.Schema(
 );
 
 cartSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+cartSchema.pre('save', function normalizeCartCurrency(next) {
+    normalizeCartCurrencyFields(this);
+    next();
+});
 
 module.exports = mongoose.model('Cart', cartSchema);

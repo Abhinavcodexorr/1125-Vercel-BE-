@@ -54,7 +54,7 @@ function buildEnrichedPackageListForBooking(bookingDoc, titleMap) {
             packageId: pkg.packageId,
             type: pkg.type,
             amount: pkg.amount,
-            currency: pkg.currency,
+            currency: normalizeCurrencyCode(pkg.currency),
             name,
             title: titleFromDb || name
         });
@@ -334,7 +334,7 @@ const createBooking = async (req, res) => {
             guestDetails,
             cabinPricePerNight: cabin.pricePerNight,
             totalAmount: parseFloat(frontendAmount),
-            currency: currency,
+            currency: normalizeCurrencyCode(currency),
             paymentMethod,
             status: 'Pending',
             paymentStatus: 'incomplete'
@@ -2665,7 +2665,7 @@ const buildCalendarEventBase = (booking, guest) => ({
     adults: booking.adults,
     children: booking.children,
     totalAmount: booking.totalAmount,
-    currency: booking.currency,
+    currency: normalizeCurrencyCode(booking.currency),
     paymentStatus: booking.paymentStatus,
     status: booking.status,
     createdAt: booking.createdAt
@@ -2708,7 +2708,7 @@ const expandBookingToCalendarEvents = (booking) => {
                 adults: line.adults ?? booking.adults,
                 children: line.children ?? booking.children,
                 totalAmount: line.totalAmount ?? booking.totalAmount,
-                currency: line.currency || booking.currency,
+                currency: normalizeCurrencyCode(line.currency || booking.currency),
                 cabin: {
                     id: line.cabinId || null,
                     name: cabinName,

@@ -181,12 +181,17 @@ const getCartItemUnavailableMessage = async (item, options = {}) => {
 const shapeCartResponse = (cart) => ({
     cartId: cart.cartId,
     subTotal: cart.subTotal,
-    currency: cart.currency,
+    currency: normalizeCurrencyCode(cart.currency),
     expiresAt: cart.expiresAt,
     items: cart.items.map((item) => ({
         _id: item._id,
         roomId: item.roomId,
-        roomSnapshot: item.roomSnapshot,
+        roomSnapshot: item.roomSnapshot
+            ? {
+                  ...item.roomSnapshot,
+                  currency: normalizeCurrencyCode(item.roomSnapshot.currency)
+              }
+            : item.roomSnapshot,
         checkInDate: item.checkInDate,
         checkOutDate: item.checkOutDate,
         adults: item.adults,
@@ -195,7 +200,7 @@ const shapeCartResponse = (cart) => ({
         nights: item.nights,
         pricePerNight: item.pricePerNight,
         subTotal: item.subTotal,
-        currency: item.currency,
+        currency: normalizeCurrencyCode(item.currency),
         isAvailable: item.isAvailable
     })),
     allAvailable: cart.items.every((item) => item.isAvailable),

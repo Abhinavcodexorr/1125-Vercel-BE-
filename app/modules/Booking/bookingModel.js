@@ -1,6 +1,10 @@
 // bookingModel.js - Add these fields to your existing schema
 const mongoose = require('mongoose');
 const { getRefundPolicyAnchorDate } = require('../../helper/refundPolicyAnchor');
+const {
+    normalizeCurrencyCode,
+    normalizeBookingCurrencyFields
+} = require('../../helper/currencyHelper');
 
 // Explicit subdocument for cabin packages (avoids Mongoose "type" reserved word ambiguity)
 const cabinPackageSchema = new mongoose.Schema({
@@ -260,6 +264,11 @@ bookingSchema.pre('save', function(next) {
     next();
 });
 
+bookingSchema.pre('save', function normalizeBookingCurrency(next) {
+    normalizeBookingCurrencyFields(this);
+    next();
+});
+
 // Method to get formatted booking
 bookingSchema.methods.getFormattedBooking = function() {
     const amountPaidRaw = Number(this.totalAmount) || 0;
@@ -274,13 +283,26 @@ bookingSchema.methods.getFormattedBooking = function() {
         bookingReference: this.bookingReference,
         cabinId: this.cabinId,
         roomId: this.roomId,
-        roomSnapshot: this.roomSnapshot || null,
+        roomSnapshot: this.roomSnapshot
+            ? {
+                  ...(this.roomSnapshot.toObject?.() || this.roomSnapshot),
+                  currency: normalizeCurrencyCode(this.roomSnapshot.currency)
+              }
+            : null,
         nights: this.nights,
         roomPricePerNight: this.roomPricePerNight,
         roomQuantity: this.roomQuantity || 1,
-        package: this.package || null, // Include package array if present
+        package: Array.isArray(this.package)
+            ? this.package.map((pkg) => ({
+                  ...(pkg.toObject?.() || pkg),
+                  currency: normalizeCurrencyCode(pkg.currency)
+              }))
+            : this.package || null,
         activities: Array.isArray(this.activities)
-            ? this.activities.map((a) => (a && typeof a.toObject === 'function' ? a.toObject() : a))
+            ? this.activities.map((a) => {
+                  const act = a && typeof a.toObject === 'function' ? a.toObject() : a;
+                  return { ...act, currency: normalizeCurrencyCode(act.currency) };
+              })
             : [],
         checkInDate: this.checkInDate,
         checkOutDate: this.checkOutDate,
@@ -294,7 +316,7 @@ bookingSchema.methods.getFormattedBooking = function() {
         discountApplied: Number(discountRaw.toFixed(2)),
         amountPaid: Number(amountPaidRaw.toFixed(2)),
         totalAmount: this.totalAmount,
-        currency: this.currency,
+        currency: normalizeCurrencyCode(this.currency),
         paymentMethod: this.paymentMethod,
         status: this.status,
         paymentStatus: this.paymentStatus,

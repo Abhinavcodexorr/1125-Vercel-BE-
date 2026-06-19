@@ -1,5 +1,9 @@
 const mongoose = require('mongoose');
-const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
+const {
+    normalizeCurrencyCode,
+    getCurrencySymbol,
+    formatPricePerNight
+} = require('../../helper/currencyHelper');
 
 const amenitySchema = new mongoose.Schema({
     key: { type: String, trim: true, default: '' },
@@ -46,14 +50,19 @@ roomSchema.index(
 const sortImages = (images) =>
     Array.isArray(images) ? [...images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : [];
 
-const baseShape = (doc) => ({
+const baseShape = (doc) => {
+    const currency = normalizeCurrencyCode(doc.currency);
+
+    return {
     _id: doc._id,
     title: doc.title,
     slug: doc.slug,
     type: doc.type,
     description: doc.description,
     price: doc.price,
-    currency: normalizeCurrencyCode(doc.currency),
+    currency,
+    currencySymbol: getCurrencySymbol(currency),
+    formattedPrice: formatPricePerNight(doc.price, currency),
     guests: doc.guests,
     quantity: doc.quantity != null ? doc.quantity : 1,
     size: doc.size,
@@ -74,6 +83,14 @@ const baseShape = (doc) => ({
     isDeleted: doc.isDeleted,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt
+    };
+};
+
+roomSchema.pre('save', function normalizeRoomCurrency(next) {
+    if (this.currency) {
+        this.currency = normalizeCurrencyCode(this.currency);
+    }
+    next();
 });
 
 roomSchema.methods.toApiShape = function toApiShape() {

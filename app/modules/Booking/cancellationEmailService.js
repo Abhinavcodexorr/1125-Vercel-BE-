@@ -5,7 +5,7 @@
  */
 const sendEmail = require('../../middleware/mail');
 const { getRefundPolicyAnchorDate } = require('../../helper/refundPolicyAnchor');
-const { getCurrencyDisplayPrefix } = require('../../helper/currencyHelper');
+const { getCurrencyDisplayPrefix, normalizeCurrencyCode } = require('../../helper/currencyHelper');
 
 function escapeHtml(s) {
     if (s === undefined || s === null) return '';
@@ -187,7 +187,7 @@ async function sendCancellationEmail(booking, packageDetailsMap = new Map(), opt
     const guestName =
         `${booking.guestDetails?.firstName || ''} ${booking.guestDetails?.lastName || ''}`.trim() || 'Guest';
     const guestPhoneLine = formatGuestPhoneForEmail(booking.guestDetails);
-    const cur = booking.currency || 'GHS';
+    const cur = normalizeCurrencyCode(booking.currency);
 
     const hasActivities = Array.isArray(booking.activities) && booking.activities.length > 0;
     const hasCabinStay =
@@ -251,7 +251,7 @@ async function sendCancellationEmail(booking, packageDetailsMap = new Map(), opt
         const multiAct = booking.activities.length > 1;
         for (const act of booking.activities) {
             const ticketsHtml = activityTicketLinesHtml(act);
-            const actCur = act.currency || cur;
+            const actCur = normalizeCurrencyCode(act.currency || cur);
             detailsRows += `
 <tr><td colspan="1" style="padding:12px 0 4px 0;">
 <p style="margin:0;font-size:15px;font-weight:bold;color:#133730;border-bottom:1px solid #e9ecef;padding-bottom:8px;">Activity</p>
@@ -301,7 +301,7 @@ ${detailRow('Package Name:', escapeHtml(packageDetails?.title || pkg.name || 'N/
 <tr>
 <td class="detail-item" style="background-color:#e8f5e9;border-left:4px solid #2c5f2d;padding:12px 15px;margin-bottom:0;">
 <span class="detail-value" style="color:#2c5f2d;font-size:15px;font-weight:600;display:block;word-wrap:break-word;line-height:1.5;">
-${escapeHtml(pkg.currency || cur)} ${Number(pkg.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+${escapeHtml(normalizeCurrencyCode(pkg.currency || cur))} ${Number(pkg.amount ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
 </span>
 </td>
 </tr>
