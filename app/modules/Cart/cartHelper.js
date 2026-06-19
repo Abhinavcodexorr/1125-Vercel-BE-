@@ -7,6 +7,7 @@ const {
     toDateOnly
 } = require('../Rooms/roomAvailabilityHelper');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
+const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
 const msg = require('./cartMessages');
 
 const isObjectId = (value) =>
@@ -112,7 +113,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
             slug: room.slug,
             type: room.type,
             price: pricePerNight,
-            currency: room.currency || 'GHS',
+            currency: normalizeCurrencyCode(room.currency),
             guests: room.guests,
             quantity: room.quantity || 1,
             images: shapeRoomImagesForSnapshot(room)
@@ -125,7 +126,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
         nights,
         pricePerNight,
         subTotal: stayEval.subTotal,
-        currency: room.currency || 'GHS',
+        currency: normalizeCurrencyCode(room.currency),
         isAvailable: stayEval.isAvailable
     };
 };
@@ -133,7 +134,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
 const recalculateCartTotals = (cart) => {
     const subTotal = cart.items.reduce((sum, item) => sum + (Number(item.subTotal) || 0), 0);
     cart.subTotal = Number(subTotal.toFixed(2));
-    cart.currency = cart.items[0]?.currency || cart.currency || 'GHS';
+    cart.currency = normalizeCurrencyCode(cart.items[0]?.currency || cart.currency);
     return cart;
 };
 

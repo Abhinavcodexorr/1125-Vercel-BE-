@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
 
 const amenitySchema = new mongoose.Schema({
     key: { type: String, trim: true, default: '' },
@@ -52,7 +53,7 @@ const baseShape = (doc) => ({
     type: doc.type,
     description: doc.description,
     price: doc.price,
-    currency: doc.currency || 'GHS',
+    currency: normalizeCurrencyCode(doc.currency),
     guests: doc.guests,
     quantity: doc.quantity != null ? doc.quantity : 1,
     size: doc.size,

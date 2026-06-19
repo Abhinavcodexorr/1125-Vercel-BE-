@@ -14,6 +14,7 @@ const {
 const { formatRoomNotAvailableForDates, getHoldExpiresAt, getAllRoomBlockingBookings, computeNights } = require('../Rooms/roomAvailabilityHelper');
 const msg = require('../Cart/cartMessages');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
+const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
 
 const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
@@ -79,7 +80,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         cartId,
         subTotal,
         totalAmount: subTotal,
-        currency: item.currency || evaluation.room.currency || 'GHS',
+        currency: normalizeCurrencyCode(item.currency || evaluation.room.currency),
         paymentMethod: 'Hubtel',
         status: 'Pending',
         paymentStatus: 'incomplete',
@@ -170,7 +171,7 @@ const createRoomBooking = async (req, res) => {
                     slug: evaluation.room.slug,
                     type: evaluation.room.type,
                     price: evaluation.room.price,
-                    currency: evaluation.room.currency || 'GHS',
+                    currency: normalizeCurrencyCode(evaluation.room.currency),
                     guests: evaluation.room.guests,
                     quantity: evaluation.room.quantity || 1
                 },
@@ -180,7 +181,7 @@ const createRoomBooking = async (req, res) => {
                 children: input.children,
                 quantity: evaluation.resolvedQuantity,
                 pricePerNight: evaluation.room.price,
-                currency: evaluation.room.currency || 'GHS'
+                currency: normalizeCurrencyCode(evaluation.room.currency)
             };
 
             const booking = await createBookingFromCartItem(item, guest, null);

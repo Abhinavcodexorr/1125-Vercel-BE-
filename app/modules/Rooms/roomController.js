@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Room = require('./roomModel');
 const response = require('../../helper/response');
+const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
 const msg = require('./roomMessages');
 const {
     getAllRoomBlockingBookings,
@@ -116,10 +117,7 @@ const createRoom = async (req, res) => {
                   }))
             : [];
 
-        const roomCurrency =
-            currency != null && String(currency).trim()
-                ? String(currency).trim().toUpperCase()
-                : 'GHS';
+        const roomCurrency = normalizeCurrencyCode(currency);
 
         const room = new Room({
             title: String(title).trim(),
@@ -213,10 +211,7 @@ const updateRoom = async (req, res) => {
             updateData.price = priceNum;
         }
         if (currency !== undefined) {
-            updateData.currency =
-                currency != null && String(currency).trim()
-                    ? String(currency).trim().toUpperCase()
-                    : 'GHS';
+            updateData.currency = normalizeCurrencyCode(currency);
         }
         if (guests !== undefined) {
             const guestsNum = parseInt(guests, 10);
@@ -472,7 +467,7 @@ const checkRoomStayAvailability = async (req, res) => {
             children: stay.children,
             pricePerNight: room.price,
             totalAmount: stayEval.subTotal,
-            currency: room.currency || 'GHS'
+            currency: normalizeCurrencyCode(room.currency)
         };
 
         if (!stayEval.isAvailable) {

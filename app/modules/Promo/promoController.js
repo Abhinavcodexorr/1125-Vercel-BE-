@@ -1,5 +1,6 @@
 const PromoCode = require('./promoModel');
 const response = require('../../helper/response');
+const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
 
 const createPromoCode = async (req, res) => {
     try {
@@ -40,7 +41,7 @@ const createPromoCode = async (req, res) => {
             discountValue: parseFloat(discountValue),
             minOrderAmount: minOrderAmount || 0,
             maxDiscountAmount: maxDiscountAmount || null,
-            currency: currency || 'GHS',
+            currency: normalizeCurrencyCode(currency),
             usageType: usageType || 'multiple',
             maxUses: maxUses || null,
             startDate: startDate || null,

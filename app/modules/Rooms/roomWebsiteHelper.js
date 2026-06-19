@@ -13,13 +13,12 @@ const {
     computeNights,
     toDateOnly
 } = require('./roomAvailabilityHelper');
-
-const CURRENCY_SYMBOLS = {
-    GHS: 'GH₵',
-    USD: '$',
-    EUR: '€',
-    GBP: '£'
-};
+const {
+    CURRENCY_SYMBOLS,
+    normalizeCurrencyCode,
+    getCurrencySymbol,
+    formatPricePerNight
+} = require('../../helper/currencyHelper');
 
 const parsePositiveInt = (value, fallback) => {
     const num = parseInt(value, 10);
@@ -55,11 +54,7 @@ const parseStayQuery = (query) => {
     };
 };
 
-const formatPrice = (price, currency = 'GHS') => {
-    const symbol = CURRENCY_SYMBOLS[currency] || currency;
-    const amount = Number(price) || 0;
-    return `${symbol} ${amount.toFixed(2)}/night`;
-};
+const formatPrice = (price, currency = 'GHS') => formatPricePerNight(price, currency);
 
 const expandBlockedDatesPalmStyle = (blockedRanges = []) => {
     const expanded = [];
@@ -238,7 +233,7 @@ const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
 };
 
 const shapeRoomBaseForWebsite = (room) => {
-    const currency = room.currency || 'GHS';
+    const currency = normalizeCurrencyCode(room.currency);
 
     return {
         _id: room._id,
@@ -252,7 +247,7 @@ const shapeRoomBaseForWebsite = (room) => {
         pricePerNight: room.price,
         price: room.price,
         currency,
-        currencySymbol: CURRENCY_SYMBOLS[currency] || currency,
+        currencySymbol: getCurrencySymbol(currency),
         formattedPrice: formatPrice(room.price, currency),
         guests: room.guests,
         quantity: getRoomQuantity(room),

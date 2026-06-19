@@ -5,6 +5,7 @@
  */
 const sendEmail = require('../../middleware/mail');
 const { getRefundPolicyAnchorDate } = require('../../helper/refundPolicyAnchor');
+const { getCurrencyDisplayPrefix } = require('../../helper/currencyHelper');
 
 function escapeHtml(s) {
     if (s === undefined || s === null) return '';
@@ -54,10 +55,7 @@ function formatActivityDate(d) {
 }
 
 function currencyPrefix(code) {
-    const c = code || 'GHS';
-    if (c === 'USD') return 'USD $';
-    if (c === 'GHS') return 'GHS ₵';
-    return `${c} `;
+    return getCurrencyDisplayPrefix(code);
 }
 
 function fmtAmount(n, cur) {

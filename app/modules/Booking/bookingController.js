@@ -12,6 +12,7 @@ const {
 } = require('../Rooms/roomWebsiteHelper');
 const { formatDateKey } = require('../Rooms/roomAvailabilityHelper');
 const response = require('../../helper/response');
+const { getCurrencyDisplayPrefix, normalizeCurrencyCode } = require('../../helper/currencyHelper');
 const sendEmail = require('../../middleware/mail');
 const { sendCancellationEmail } = require('./cancellationEmailService');
 
@@ -1092,7 +1093,7 @@ const handleExpressPayCallback = async (req, res) => {
                 const bookedBy = `${updatedBooking.guestDetails?.firstName || ''} ${updatedBooking.guestDetails?.lastName || ''}`.trim() || 'Guest';
                 
                 // Format amount
-                const currencySymbol = updatedBooking.currency === 'USD' ? 'USD $' : updatedBooking.currency === 'GHS' ? 'GHS ₵' : (updatedBooking.currency || 'GHS') + ' ';
+                const currencySymbol = getCurrencyDisplayPrefix(updatedBooking.currency);
                 const amountPaid = `${currencySymbol}${updatedBooking.totalAmount?.toLocaleString() || '0.00'}`;
 
                 const emailMessage = `
@@ -1578,7 +1579,7 @@ const handleExpressPayCallback = async (req, res) => {
                                                                     <tr>
                                                                         <td class="detail-item" style="background-color: #e8f5e9; border-left: 4px solid #2c5f2d; padding: 12px 15px; margin-bottom: 0;">
                                                                             <span class="detail-value" style="color: #2c5f2d; font-size: 15px; font-weight: 600; display: block; word-wrap: break-word; line-height: 1.5;">
-                                                                                ${pkg.currency || 'GHC'} ${pkg.amount?.toLocaleString() || '0.00'}
+                                                                                ${normalizeCurrencyCode(pkg.currency)} ${pkg.amount?.toLocaleString() || '0.00'}
                                                                             </span>
                                                                         </td>
                                                                     </tr>
@@ -1938,7 +1939,7 @@ const confirmBooking = async (req, res) => {
                 const bookedBy = `${updatedBooking.guestDetails?.firstName || ''} ${updatedBooking.guestDetails?.lastName || ''}`.trim() || 'Guest';
                 
                 // Format amount
-                const currencySymbol = updatedBooking.currency === 'USD' ? 'USD $' : updatedBooking.currency === 'GHS' ? 'GHS ₵' : (updatedBooking.currency || 'GHS') + ' ';
+                const currencySymbol = getCurrencyDisplayPrefix(updatedBooking.currency);
                 const amountPaid = `${currencySymbol}${updatedBooking.totalAmount?.toLocaleString() || '0.00'}`;
 
                 // NOTE: To embed logo as base64 for better email client compatibility, convert the image to base64:
@@ -2432,7 +2433,7 @@ const confirmBooking = async (req, res) => {
                                                                     <tr>
                                                                         <td class="detail-item" style="background-color: #e8f5e9; border-left: 4px solid #2c5f2d; padding: 12px 15px; margin-bottom: 0;">
                                                                             <span class="detail-value" style="color: #2c5f2d; font-size: 15px; font-weight: 600; display: block; word-wrap: break-word; line-height: 1.5;">
-                                                                                ${pkg.currency || 'GHC'} ${pkg.amount?.toLocaleString() || '0.00'}
+                                                                                ${normalizeCurrencyCode(pkg.currency)} ${pkg.amount?.toLocaleString() || '0.00'}
                                                                             </span>
                                                                         </td>
                                                                     </tr>
@@ -2858,7 +2859,7 @@ const generateIncompleteBookingEmail = (booking, packageDetailsMap = new Map()) 
     
     const adults = booking.adults || 0;
     const children = booking.children || 0;
-    const currencySymbol = booking.currency === 'USD' ? 'USD $' : booking.currency === 'GHS' ? 'GHS ₵' : (booking.currency || 'GHS') + ' ';
+    const currencySymbol = getCurrencyDisplayPrefix(booking.currency);
     const totalAmount = `${currencySymbol}${booking.totalAmount?.toLocaleString() || '0.00'}`;
     const cabinName = booking.cabinId?.name || 'Cabin';
     const continueBookingLink = 'https://www.palmislandgh.com/cabins';
@@ -3190,7 +3191,7 @@ const generateIncompleteBookingEmail = (booking, packageDetailsMap = new Map()) 
                                                         <tr>
                                                                         <td class="detail-item" style="background-color: #e8f5e9; border-left: 4px solid #2c5f2d; padding: 12px 15px; margin-bottom: 0;">
                                                                             <span class="detail-value" style="color: #2c5f2d; font-size: 15px; font-weight: 600; display: block; word-wrap: break-word; line-height: 1.5;">
-                                                                                ${pkg.currency || 'GHC'} ${pkg.amount?.toLocaleString() || '0.00'}
+                                                                                ${normalizeCurrencyCode(pkg.currency)} ${pkg.amount?.toLocaleString() || '0.00'}
                                                                             </span>
                                                                         </td>
                                                         </tr>
@@ -3389,7 +3390,7 @@ const sendConfirmationEmail = async (booking, packageDetailsMap = new Map()) => 
         const bookedBy = `${booking.guestDetails?.firstName || ''} ${booking.guestDetails?.lastName || ''}`.trim() || 'Guest';
         
         // Format amount
-        const currencySymbol = booking.currency === 'USD' ? 'USD $' : booking.currency === 'GHS' ? 'GHS ₵' : (booking.currency || 'GHS') + ' ';
+        const currencySymbol = getCurrencyDisplayPrefix(booking.currency);
         const amountPaid = `${currencySymbol}${booking.totalAmount?.toLocaleString() || '0.00'}`;
 
         // Full email template - same as confirmBooking function
@@ -3876,7 +3877,7 @@ const sendConfirmationEmail = async (booking, packageDetailsMap = new Map()) => 
                                                                     <tr>
                                                                         <td class="detail-item" style="background-color: #e8f5e9; border-left: 4px solid #2c5f2d; padding: 12px 15px; margin-bottom: 0;">
                                                                             <span class="detail-value" style="color: #2c5f2d; font-size: 15px; font-weight: 600; display: block; word-wrap: break-word; line-height: 1.5;">
-                                                                                ${pkg.currency || 'GHC'} ${pkg.amount?.toLocaleString() || '0.00'}
+                                                                                ${normalizeCurrencyCode(pkg.currency)} ${pkg.amount?.toLocaleString() || '0.00'}
                                                                             </span>
                                                                         </td>
                                                                     </tr>
