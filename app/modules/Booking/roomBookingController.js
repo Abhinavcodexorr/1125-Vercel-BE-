@@ -2,8 +2,9 @@ const mongoose = require('mongoose');
 const Booking = require('./bookingModel');
 const Cart = require('../Cart/cartModel');
 const response = require('../../helper/response');
+// Hubtel payment — disabled on create for now; callback routes still use hubtelService
 const hubtelService = require('./hubtelService');
-const { isHubtelEnabled } = require('../../config/hubtel.config');
+// const { isHubtelEnabled } = require('../../config/hubtel.config');
 const {
     parseCartItemInput,
     evaluateCartItemAvailability,
@@ -11,7 +12,7 @@ const {
     shapeCartResponse,
     getCartItemUnavailableMessage
 } = require('../Cart/cartHelper');
-const { formatRoomNotAvailableForDates, getHoldExpiresAt, getAllRoomBlockingBookings, computeNights } = require('../Rooms/roomAvailabilityHelper');
+const { formatRoomNotAvailableForDates, getAllRoomBlockingBookings, computeNights } = require('../Rooms/roomAvailabilityHelper');
 const msg = require('../Cart/cartMessages');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
@@ -64,7 +65,6 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     const nights = computeNights(item.checkInDate, item.checkOutDate);
     const pricePerNight = Number(item.pricePerNight || evaluation.room.price) || 0;
     const subTotal = Number((pricePerNight * nights * item.quantity).toFixed(2));
-    const holdExpiresAt = getHoldExpiresAt();
 
     const booking = new Booking({
         roomId: item.roomId,
@@ -82,9 +82,10 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         totalAmount: subTotal,
         currency: normalizeCurrencyCode(item.currency || evaluation.room.currency),
         paymentMethod: 'Hubtel',
-        status: 'Pending',
-        paymentStatus: 'incomplete',
-        holdExpiresAt
+        status: 'Confirmed',
+        paymentStatus: 'paid',
+        paymentDate: new Date(),
+        holdExpiresAt: null
     });
 
     await booking.save();
@@ -108,14 +109,8 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     return booking;
 };
 
-const PAYMENT_GATEWAY_INACTIVE = 'Payment gateway not activated yet.';
-
 const createRoomBooking = async (req, res) => {
     try {
-        if (!isHubtelEnabled()) {
-            return response.error400(res, PAYMENT_GATEWAY_INACTIVE);
-        }
-
         const { cartId, guestDetails, roomId } = req.body;
         const guest = buildGuestDetails(guestDetails);
         if (!guest || !guest.mobileNumber) {
@@ -202,35 +197,36 @@ const createRoomBooking = async (req, res) => {
             });
         }
 
-        let hubtel;
-        try {
-            hubtel = await hubtelService.initiateCheckout({
-                totalAmount,
-                description: `1125 room booking ${sharedReference}`,
-                clientReference: sharedReference,
-                customerPhoneNumber: guest.mobileNumber
-            });
-        } catch (paymentError) {
-            await Booking.deleteMany({ _id: { $in: bookings.map((b) => b._id) } });
-            throw paymentError;
-        }
+        // --- Hubtel checkout (disabled for now) ---
+        // let hubtel;
+        // try {
+        //     hubtel = await hubtelService.initiateCheckout({
+        //         totalAmount,
+        //         description: `1125 room booking ${sharedReference}`,
+        //         clientReference: sharedReference,
+        //         customerPhoneNumber: guest.mobileNumber
+        //     });
+        // } catch (paymentError) {
+        //     await Booking.deleteMany({ _id: { $in: bookings.map((b) => b._id) } });
+        //     throw paymentError;
+        // }
+        //
+        // await Booking.updateMany(
+        //     { _id: { $in: bookings.map((b) => b._id) } },
+        //     {
+        //         paymentStatus: 'pending',
+        //         paymentResponse: hubtel.raw
+        //     }
+        // );
 
-        await Booking.updateMany(
-            { _id: { $in: bookings.map((b) => b._id) } },
-            {
-                paymentStatus: 'pending',
-                paymentResponse: hubtel.raw
-            }
-        );
-
-        return response.created201(res, 'Booking created. Complete payment with Hubtel.', {
+        return response.created201(res, 'Booking successful.', {
             bookingReference: sharedReference,
             bookingIds: bookings.map((b) => b._id),
             totalAmount: Number(totalAmount.toFixed(2)),
             currency: bookings[0].currency,
-            paymentMethod: 'Hubtel',
-            checkoutUrl: hubtel.checkoutUrl,
-            holdExpiresAt: bookings[0].holdExpiresAt,
+            paymentMethod: bookings[0].paymentMethod,
+            status: 'Confirmed',
+            paymentStatus: 'paid',
             bookings: bookings.map((b) => b.getFormattedBooking())
         });
     } catch (error) {
@@ -239,9 +235,7 @@ const createRoomBooking = async (req, res) => {
             /not available for the selected dates|unit\(s\) available for the selected dates|This room is not available|Max\. allowed capacity|cart items/i.test(
                 error.message || ''
             );
-        const isHubtelError =
-            /Hubtel|Request failed with status code|ENOTFOUND|ERR_INVALID_URL/i.test(error.message || '');
-        if (isAvailabilityError || isHubtelError) {
+        if (isAvailabilityError) {
             return response.error400(res, error.message);
         }
         return response.serverError500(res, msg.NETWORK_ERROR, error.message);
