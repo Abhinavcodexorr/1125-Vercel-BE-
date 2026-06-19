@@ -136,11 +136,17 @@ const buildBookingCountByDate = (bookings) => {
     return counts;
 };
 
-const getAllRoomBlockingBookings = async (roomId) =>
-    Booking.find(roomBlockingBookingQuery(roomId))
+const getAllRoomBlockingBookings = async (roomId, options = {}) => {
+    const { excludeBookingIds = [] } = options;
+    const excludeSet = new Set(excludeBookingIds.map(String));
+    const bookings = await Booking.find(roomBlockingBookingQuery(roomId))
         .select(BLOCKING_BOOKING_SELECT)
         .sort({ checkInDate: 1 })
         .lean();
+
+    if (!excludeSet.size) return bookings;
+    return bookings.filter((booking) => !excludeSet.has(String(booking._id)));
+};
 
 const getRoomBlockingBookingsByRoomIds = async (roomIds = []) => {
     if (!roomIds.length) return [];

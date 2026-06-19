@@ -99,7 +99,9 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         hasStayDates: true,
         validStayDates: item.checkOutDate > item.checkInDate
     };
-    const blockingBookings = await getAllRoomBlockingBookings(item.roomId);
+    const blockingBookings = await getAllRoomBlockingBookings(item.roomId, {
+        excludeBookingIds: [booking._id]
+    });
     const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay);
     if (!postSaveEval.isAvailable) {
         await Booking.deleteOne({ _id: booking._id });
