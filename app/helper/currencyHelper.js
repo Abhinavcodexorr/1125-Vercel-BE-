@@ -1,20 +1,31 @@
 const CURRENCY_SYMBOLS = {
-    GHS: 'GH₵',
+    GHS: 'GHS',
     USD: '$',
     EUR: '€',
     GBP: '£'
 };
 
 const LEGACY_CURRENCY_ALIASES = {
-    GHC: 'GHS'
+    GHC: 'GHS',
+    CEDI: 'GHS'
 };
 
+const LEGACY_CURRENCY_SYMBOLS = ['GH₵', '₵'];
+
 const normalizeCurrencyCode = (code, fallback = 'GHS') => {
-    const raw =
-        code != null && String(code).trim()
-            ? String(code).trim().toUpperCase()
-            : fallback;
-    return LEGACY_CURRENCY_ALIASES[raw] || raw;
+    if (code == null || !String(code).trim()) return fallback;
+
+    const trimmed = String(code).trim();
+    const upper = trimmed.toUpperCase();
+
+    if (LEGACY_CURRENCY_ALIASES[upper]) return LEGACY_CURRENCY_ALIASES[upper];
+    if (LEGACY_CURRENCY_SYMBOLS.includes(trimmed)) return 'GHS';
+
+    for (const [currencyCode, symbol] of Object.entries(CURRENCY_SYMBOLS)) {
+        if (trimmed === symbol || upper === symbol) return currencyCode;
+    }
+
+    return upper;
 };
 
 const getCurrencySymbol = (code) => {
@@ -25,7 +36,7 @@ const getCurrencySymbol = (code) => {
 const getCurrencyDisplayPrefix = (code) => {
     const currency = normalizeCurrencyCode(code);
     if (currency === 'USD') return 'USD $';
-    if (currency === 'GHS') return 'GHS ₵';
+    if (currency === 'GHS') return 'GHS ';
     return `${currency} `;
 };
 
@@ -37,10 +48,12 @@ const formatPricePerNight = (price, currencyCode) => {
 
 const shapeMoneyFields = (price, currencyCode) => {
     const currency = normalizeCurrencyCode(currencyCode);
+    const currencySymbol = getCurrencySymbol(currency);
+
     return {
         currency,
-        currencySymbol: getCurrencySymbol(currency),
-        formattedPrice: formatPricePerNight(price, currency)
+        currencySymbol,
+        formattedPrice: `${currencySymbol} ${(Number(price) || 0).toFixed(2)}/night`
     };
 };
 
