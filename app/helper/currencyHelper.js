@@ -35,6 +35,21 @@ const formatPricePerNight = (price, currencyCode) => {
     return `${symbol} ${amount.toFixed(2)}/night`;
 };
 
+const shapeMoneyFields = (price, currencyCode) => {
+    const currency = normalizeCurrencyCode(currencyCode);
+    return {
+        currency,
+        currencySymbol: getCurrencySymbol(currency),
+        formattedPrice: formatPricePerNight(price, currency)
+    };
+};
+
+const normalizeRoomDocCurrency = (doc) => {
+    if (!doc?.currency) return doc;
+    doc.currency = normalizeCurrencyCode(doc.currency);
+    return doc;
+};
+
 const normalizeBookingCurrencyFields = (doc) => {
     if (!doc) return doc;
     if (doc.currency) doc.currency = normalizeCurrencyCode(doc.currency);
@@ -84,6 +99,8 @@ module.exports = {
     getCurrencySymbol,
     getCurrencyDisplayPrefix,
     formatPricePerNight,
+    shapeMoneyFields,
+    normalizeRoomDocCurrency,
     normalizeBookingCurrencyFields,
     normalizeCartCurrencyFields
 };

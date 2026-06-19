@@ -1,9 +1,5 @@
 const mongoose = require('mongoose');
-const {
-    normalizeCurrencyCode,
-    getCurrencySymbol,
-    formatPricePerNight
-} = require('../../helper/currencyHelper');
+const { normalizeCurrencyCode, shapeMoneyFields, normalizeRoomDocCurrency } = require('../../helper/currencyHelper');
 
 const amenitySchema = new mongoose.Schema({
     key: { type: String, trim: true, default: '' },
@@ -29,7 +25,7 @@ const roomSchema = new mongoose.Schema({
     type: { type: String, required: true, trim: true },
     description: { type: String, trim: true, default: '' },
     price: { type: Number, required: true, min: 0 },
-    currency: { type: String, trim: true, default: 'GHS', uppercase: true },
+    currency: { type: String, trim: true, default: 'GHS', uppercase: true, set: normalizeCurrencyCode },
     guests: { type: Number, required: true, min: 1 },
     quantity: { type: Number, required: true, min: 1, default: 1 },
     size: { type: Number, required: true, min: 0 },
@@ -51,7 +47,7 @@ const sortImages = (images) =>
     Array.isArray(images) ? [...images].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)) : [];
 
 const baseShape = (doc) => {
-    const currency = normalizeCurrencyCode(doc.currency);
+    const money = shapeMoneyFields(doc.price, doc.currency);
 
     return {
     _id: doc._id,
@@ -60,9 +56,7 @@ const baseShape = (doc) => {
     type: doc.type,
     description: doc.description,
     price: doc.price,
-    currency,
-    currencySymbol: getCurrencySymbol(currency),
-    formattedPrice: formatPricePerNight(doc.price, currency),
+    ...money,
     guests: doc.guests,
     quantity: doc.quantity != null ? doc.quantity : 1,
     size: doc.size,
@@ -91,6 +85,16 @@ roomSchema.pre('save', function normalizeRoomCurrency(next) {
         this.currency = normalizeCurrencyCode(this.currency);
     }
     next();
+});
+
+roomSchema.post('find', function normalizeFoundRoomCurrencies(docs) {
+    if (Array.isArray(docs)) {
+        docs.forEach(normalizeRoomDocCurrency);
+    }
+});
+
+roomSchema.post('findOne', function normalizeFoundRoomCurrency(doc) {
+    normalizeRoomDocCurrency(doc);
 });
 
 roomSchema.methods.toApiShape = function toApiShape() {

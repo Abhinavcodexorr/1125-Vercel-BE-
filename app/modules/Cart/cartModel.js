@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { normalizeCartCurrencyFields } = require('../../helper/currencyHelper');
+const { normalizeCartCurrencyFields, normalizeCurrencyCode } = require('../../helper/currencyHelper');
 
 const cartItemSchema = new mongoose.Schema(
     {
@@ -9,7 +9,7 @@ const cartItemSchema = new mongoose.Schema(
             slug: { type: String, trim: true },
             type: { type: String, trim: true },
             price: { type: Number, min: 0 },
-            currency: { type: String, trim: true, default: 'GHS' },
+            currency: { type: String, trim: true, default: 'GHS', set: normalizeCurrencyCode },
             guests: { type: Number, min: 1 },
             quantity: { type: Number, min: 1 },
             images: {
@@ -32,7 +32,7 @@ const cartItemSchema = new mongoose.Schema(
         nights: { type: Number, default: 0, min: 0 },
         pricePerNight: { type: Number, default: 0, min: 0 },
         subTotal: { type: Number, default: 0, min: 0 },
-        currency: { type: String, default: 'GHS' },
+        currency: { type: String, default: 'GHS', set: normalizeCurrencyCode },
         isAvailable: { type: Boolean, default: true }
     },
     { timestamps: true }
@@ -43,7 +43,7 @@ const cartSchema = new mongoose.Schema(
         cartId: { type: String, required: true, unique: true, index: true },
         items: { type: [cartItemSchema], default: [] },
         subTotal: { type: Number, default: 0, min: 0 },
-        currency: { type: String, default: 'GHS' },
+        currency: { type: String, default: 'GHS', set: normalizeCurrencyCode },
         expiresAt: { type: Date, required: true }
     },
     { timestamps: true }
@@ -54,6 +54,16 @@ cartSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 cartSchema.pre('save', function normalizeCartCurrency(next) {
     normalizeCartCurrencyFields(this);
     next();
+});
+
+cartSchema.post('find', function normalizeFoundCartCurrencies(docs) {
+    if (Array.isArray(docs)) {
+        docs.forEach(normalizeCartCurrencyFields);
+    }
+});
+
+cartSchema.post('findOne', function normalizeFoundCartCurrency(doc) {
+    normalizeCartCurrencyFields(doc);
 });
 
 module.exports = mongoose.model('Cart', cartSchema);

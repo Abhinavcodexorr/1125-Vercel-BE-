@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Room = require('./roomModel');
 const response = require('../../helper/response');
-const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
+const { normalizeCurrencyCode, shapeMoneyFields } = require('../../helper/currencyHelper');
 const msg = require('./roomMessages');
 const {
     getAllRoomBlockingBookings,
@@ -371,7 +371,7 @@ const getRoomsForWebsite = async (req, res) => {
         let shaped = rooms.map((room) => {
             const bookings = bookingsByRoom[String(room._id)] || [];
             const stayEval = evaluateRoomStay(room, bookings, stay);
-            return { room: shapeRoomBaseForWebsite(room), stayEval, createdAt: room.createdAt };
+            return { rawRoom: room, stayEval, createdAt: room.createdAt };
         });
 
         if (stay.hasStayDates && stay.validStayDates) {
@@ -389,7 +389,7 @@ const getRoomsForWebsite = async (req, res) => {
         const start = (stay.page - 1) * stay.limit;
         const paginated = shaped
             .slice(start, start + stay.limit)
-            .map(({ room, stayEval }) => attachStayAvailabilityToRoom(room, stay, stayEval));
+            .map(({ rawRoom, stayEval }) => attachStayAvailabilityToRoom(rawRoom, stay, stayEval));
 
         return res.status(200).json({
             success: true,
@@ -456,6 +456,7 @@ const checkRoomStayAvailability = async (req, res) => {
         const bookings = await getAllRoomBlockingBookings(room._id);
         const stayEval = evaluateRoomStay(room, bookings, stay);
 
+        const money = shapeMoneyFields(room.price, room.currency);
         const payload = {
             ...shapeStayEvalForWebsite(stayEval),
             roomId: room._id,
@@ -467,7 +468,7 @@ const checkRoomStayAvailability = async (req, res) => {
             children: stay.children,
             pricePerNight: room.price,
             totalAmount: stayEval.subTotal,
-            currency: normalizeCurrencyCode(room.currency)
+            ...money
         };
 
         if (!stayEval.isAvailable) {

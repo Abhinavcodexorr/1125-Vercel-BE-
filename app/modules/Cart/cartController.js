@@ -78,7 +78,7 @@ const addToCart = async (req, res) => {
         recalculateCartTotals(cart);
         await cart.save();
 
-        return response.created201(res, msg.ITEM_ADDED, { cartId: cart.cartId });
+        return response.created201(res, msg.ITEM_ADDED, shapeCartResponse(cart));
     } catch (error) {
         console.error('Add to cart error:', error.message);
         return response.serverError500(res, msg.NETWORK_ERROR, error.message);

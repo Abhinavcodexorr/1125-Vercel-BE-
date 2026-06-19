@@ -15,9 +15,7 @@ const {
 } = require('./roomAvailabilityHelper');
 const {
     CURRENCY_SYMBOLS,
-    normalizeCurrencyCode,
-    getCurrencySymbol,
-    formatPricePerNight
+    shapeMoneyFields
 } = require('../../helper/currencyHelper');
 
 const parsePositiveInt = (value, fallback) => {
@@ -54,7 +52,7 @@ const parseStayQuery = (query) => {
     };
 };
 
-const formatPrice = (price, currency = 'GHS') => formatPricePerNight(price, currency);
+const formatPrice = (price, currency = 'GHS') => shapeMoneyFields(price, currency).formattedPrice;
 
 const expandBlockedDatesPalmStyle = (blockedRanges = []) => {
     const expanded = [];
@@ -233,7 +231,7 @@ const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
 };
 
 const shapeRoomBaseForWebsite = (room) => {
-    const currency = normalizeCurrencyCode(room.currency);
+    const money = shapeMoneyFields(room.price, room.currency);
 
     return {
         _id: room._id,
@@ -246,9 +244,7 @@ const shapeRoomBaseForWebsite = (room) => {
         unit: room.unit || 'sq ft',
         pricePerNight: room.price,
         price: room.price,
-        currency,
-        currencySymbol: getCurrencySymbol(currency),
-        formattedPrice: formatPrice(room.price, currency),
+        ...money,
         guests: room.guests,
         quantity: getRoomQuantity(room),
         adultCapacity: room.guests,

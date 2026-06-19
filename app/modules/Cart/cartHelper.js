@@ -7,7 +7,7 @@ const {
     toDateOnly
 } = require('../Rooms/roomAvailabilityHelper');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
-const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
+const { normalizeCurrencyCode, shapeMoneyFields } = require('../../helper/currencyHelper');
 const msg = require('./cartMessages');
 
 const isObjectId = (value) =>
@@ -105,6 +105,7 @@ const evaluateCartItemAvailability = async (roomId, input, options = {}) => {
 const buildCartItemFromEvaluation = (room, input, stayEval) => {
     const nights = computeNights(input.checkInDate, input.checkOutDate);
     const pricePerNight = Number(room.price) || 0;
+    const money = shapeMoneyFields(pricePerNight, room.currency);
 
     return {
         roomId: room._id,
@@ -113,7 +114,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
             slug: room.slug,
             type: room.type,
             price: pricePerNight,
-            currency: normalizeCurrencyCode(room.currency),
+            ...money,
             guests: room.guests,
             quantity: room.quantity || 1,
             images: shapeRoomImagesForSnapshot(room)
@@ -126,7 +127,7 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
         nights,
         pricePerNight,
         subTotal: stayEval.subTotal,
-        currency: normalizeCurrencyCode(room.currency),
+        ...money,
         isAvailable: stayEval.isAvailable
     };
 };
@@ -183,26 +184,33 @@ const shapeCartResponse = (cart) => ({
     subTotal: cart.subTotal,
     currency: normalizeCurrencyCode(cart.currency),
     expiresAt: cart.expiresAt,
-    items: cart.items.map((item) => ({
-        _id: item._id,
-        roomId: item.roomId,
-        roomSnapshot: item.roomSnapshot
-            ? {
-                  ...item.roomSnapshot,
-                  currency: normalizeCurrencyCode(item.roomSnapshot.currency)
-              }
-            : item.roomSnapshot,
-        checkInDate: item.checkInDate,
-        checkOutDate: item.checkOutDate,
-        adults: item.adults,
-        children: item.children,
-        quantity: item.quantity,
-        nights: item.nights,
-        pricePerNight: item.pricePerNight,
-        subTotal: item.subTotal,
-        currency: normalizeCurrencyCode(item.currency),
-        isAvailable: item.isAvailable
-    })),
+    items: cart.items.map((item) => {
+        const itemMoney = shapeMoneyFields(item.pricePerNight, item.currency);
+        const snapshotMoney = item.roomSnapshot
+            ? shapeMoneyFields(item.roomSnapshot.price ?? item.pricePerNight, item.roomSnapshot.currency)
+            : null;
+
+        return {
+            _id: item._id,
+            roomId: item.roomId,
+            roomSnapshot: item.roomSnapshot
+                ? {
+                      ...item.roomSnapshot,
+                      ...(snapshotMoney || {})
+                  }
+                : item.roomSnapshot,
+            checkInDate: item.checkInDate,
+            checkOutDate: item.checkOutDate,
+            adults: item.adults,
+            children: item.children,
+            quantity: item.quantity,
+            nights: item.nights,
+            pricePerNight: item.pricePerNight,
+            subTotal: item.subTotal,
+            ...itemMoney,
+            isAvailable: item.isAvailable
+        };
+    }),
     allAvailable: cart.items.every((item) => item.isAvailable),
     updatedAt: cart.updatedAt
 });
