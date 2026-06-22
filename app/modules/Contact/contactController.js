@@ -135,8 +135,11 @@ const createContact = async (req, res) => {
             
             await Promise.all(emailPromises);
 
-            return response.created201(res, "Message sent successfully", {
-                message: "Your message has been sent successfully"
+            const contactSuccessMessage =
+                "Thank you for getting in touch! We've received your message and one of our team members will contact you soon.";
+
+            return response.created201(res, contactSuccessMessage, {
+                message: contactSuccessMessage
             });
         } catch (emailError) {
             console.error('Failed to send email:', emailError);
