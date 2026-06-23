@@ -16,6 +16,66 @@ const { formatRoomNotAvailableForDates, getAllRoomBlockingBookings, computeNight
 const msg = require('../Cart/cartMessages');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
+const sendEmail = require('../../middleware/mail');
+const { sendConfirmationEmail } = require('./bookingController');
+const {
+    buildBookingInProgressSubject,
+    buildBookingInProgressEmailHtml,
+    getBookingInProgressRecipient
+} = require('./bookingInProgressEmailTemplate');
+
+const buildEmailBookingPayload = (bookings) => {
+    const primary = bookings[0];
+    const plain = primary.toObject ? primary.toObject() : { ...primary };
+    plain.totalAmount = bookings.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
+    plain.bookingReference = primary.bookingReference;
+    return {
+        payload: plain,
+        roomName:
+            bookings
+                .map((b) => b.roomSnapshot?.title)
+                .filter(Boolean)
+                .join(', ') || 'Room'
+    };
+};
+
+const notifyBookingCreatedEmails = async (bookings) => {
+    if (!bookings.length) return;
+
+    const { payload, roomName } = buildEmailBookingPayload(bookings);
+    const isConfirmedPaid =
+        payload.paymentStatus === 'paid' && payload.status === 'Confirmed';
+
+    try {
+        if (isConfirmedPaid) {
+            await sendConfirmationEmail({ ...payload, roomSnapshot: { title: roomName } });
+            return;
+        }
+
+        await sendEmail({
+            to: getBookingInProgressRecipient(),
+            subject: buildBookingInProgressSubject(payload.bookingReference),
+            message: buildBookingInProgressEmailHtml({
+                booking: payload,
+                roomName,
+                submittedAt: payload.createdAt
+            }),
+            fromName: '1125 Beach Villa'
+        });
+    } catch (emailError) {
+        console.error('Failed to send booking created notification email:', emailError.message);
+    }
+};
+
+const notifyBookingPaidEmails = async (bookings) => {
+    if (!bookings.length) return;
+    const { payload, roomName } = buildEmailBookingPayload(bookings);
+    try {
+        await sendConfirmationEmail({ ...payload, roomSnapshot: { title: roomName } });
+    } catch (emailError) {
+        console.error('Failed to send booking confirmation email:', emailError.message);
+    }
+};
 
 const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
@@ -221,6 +281,12 @@ const createRoomBooking = async (req, res) => {
         //     }
         // );
 
+        try {
+            await notifyBookingCreatedEmails(bookings);
+        } catch (emailError) {
+            console.error('Create room booking email notification error:', emailError.message);
+        }
+
         return response.created201(res, 'Booking successful.', {
             bookingReference: sharedReference,
             bookingIds: bookings.map((b) => b._id),
@@ -272,6 +338,8 @@ const handleHubtelCallback = async (req, res) => {
             transactionId: body.TransactionId || body.transactionId || bookings[0].transactionId
         };
 
+        const wasPaid = bookings[0].paymentStatus === 'paid';
+
         if (verified) {
             update.paymentStatus = 'paid';
             update.status = 'Confirmed';
@@ -281,6 +349,11 @@ const handleHubtelCallback = async (req, res) => {
         }
 
         await Booking.updateMany({ bookingReference: clientReference, isDeleted: false }, update);
+
+        if (verified && !wasPaid) {
+            const refreshed = await Booking.find({ bookingReference: clientReference, isDeleted: false });
+            await notifyBookingPaidEmails(refreshed);
+        }
 
         return res.status(200).json({ success: true, message: 'Callback processed' });
     } catch (error) {
@@ -303,6 +376,8 @@ const confirmHubtelBooking = async (req, res) => {
             return response.notFound404(res, 'Booking not found');
         }
 
+        const wasPaid = bookings[0].paymentStatus === 'paid';
+
         if (statusCheck.isPaid) {
             await Booking.updateMany(
                 { bookingReference: reference, isDeleted: false },
@@ -316,6 +391,10 @@ const confirmHubtelBooking = async (req, res) => {
         }
 
         const refreshed = await Booking.find({ bookingReference: reference, isDeleted: false });
+        if (statusCheck.isPaid && !wasPaid) {
+            await notifyBookingPaidEmails(refreshed);
+        }
+
         return response.success200(res, 'Booking payment status checked', {
             isPaid: statusCheck.isPaid,
             status: statusCheck.status,
