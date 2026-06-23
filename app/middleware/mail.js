@@ -10,8 +10,9 @@ const cleanEnvVar = (value, defaultValue) => {
 
 const mailgunApiKey = cleanEnvVar(process.env.MAILGUN_API_KEY, '');
 const mailgunDomain = cleanEnvVar(process.env.MAILGUN_DOMAIN, '');
-const mailgunBaseUrl = cleanEnvVar(process.env.MAILGUN_BASE_URL, 'https://api.eu.mailgun.net');
+const mailgunBaseUrl = cleanEnvVar(process.env.MAILGUN_BASE_URL, 'https://api.mailgun.net');
 const fromEmail = cleanEnvVar(process.env.FROM_EMAIL, '');
+const defaultFromName = cleanEnvVar(process.env.FROM_NAME, '1125 Beach Villa');
 
 // Helper function to construct Mailgun URL safely
 const getMailgunUrl = () => {
@@ -67,7 +68,8 @@ const sendEmail = async (options) => {
 
     // Create form-urlencoded data for Mailgun API
     const params = new URLSearchParams();
-    params.append('from', `Palm Island Resort <${fromEmail}>`);
+    const senderName = options.fromName || defaultFromName;
+    params.append('from', `${senderName} <${fromEmail}>`);
     params.append('to', options.to);
     params.append('subject', options.subject);
     params.append('html', options.message);

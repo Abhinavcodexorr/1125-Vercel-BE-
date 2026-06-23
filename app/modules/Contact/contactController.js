@@ -1,37 +1,60 @@
 const Contact = require('./contactModel');
 const response = require('../../helper/response');
-// Email notification — disabled for now; re-enable when SMTP/Mailgun is configured
-// const sendEmail = require('../../middleware/mail');
+const sendEmail = require('../../middleware/mail');
+const {
+    ENQUIRY_EMAIL_SUBJECT,
+    buildEnquiryEmailHtml,
+    getInquiryRecipient
+} = require('./enquiryEmailTemplate');
 
 const CONTACT_SUCCESS_MESSAGE =
     "Thank you for getting in touch! We've received your message and one of our team members will contact you soon.";
 
-// Create contact form submission
+const EMAIL_REGEX = /^\S+@\S+\.\S+$/;
+
 const createContact = async (req, res) => {
     try {
-        const { message, query } = req.body;
+        const { name, email, message, note, query } = req.body;
 
-        const messageContent = message || query;
+        const trimmedName = String(name || '').trim();
+        const trimmedEmail = String(email || '').trim().toLowerCase();
+        const messageContent = String(message || note || query || '').trim();
 
-        if (!messageContent || !messageContent.trim()) {
-            return response.error400(res, 'Message or query is required');
+        if (!trimmedName) {
+            return response.error400(res, 'Name is required');
+        }
+        if (!trimmedEmail) {
+            return response.error400(res, 'Email is required');
+        }
+        if (!EMAIL_REGEX.test(trimmedEmail)) {
+            return response.error400(res, 'Please enter a valid email address');
+        }
+        if (!messageContent) {
+            return response.error400(res, 'Message is required');
         }
 
-        const contact = new Contact({ message: messageContent.trim() });
+        const contact = new Contact({
+            name: trimmedName,
+            email: trimmedEmail,
+            message: messageContent
+        });
         await contact.save();
 
-        // --- SMTP / Mailgun notification (disabled for now) ---
-        // try {
-        //     const emailSubject = `New Enquiry Raised`;
-        //     const emailMessage = `...`;
-        //     const recipients = ['info@palmislandgh.com'];
-        //     const emailPromises = recipients.map((email) =>
-        //         sendEmail({ to: email, subject: emailSubject, message: emailMessage })
-        //     );
-        //     await Promise.all(emailPromises);
-        // } catch (emailError) {
-        //     console.error('Failed to send enquiry email:', emailError);
-        // }
+        try {
+            await sendEmail({
+                to: getInquiryRecipient(),
+                subject: ENQUIRY_EMAIL_SUBJECT,
+                message: buildEnquiryEmailHtml({
+                    name: trimmedName,
+                    email: trimmedEmail,
+                    message: messageContent,
+                    submittedAt: contact.createdAt
+                }),
+                fromName: '1125 Beach Villa'
+            });
+        } catch (emailError) {
+            console.error('Failed to send enquiry email:', emailError);
+        }
 
         return response.created201(res, CONTACT_SUCCESS_MESSAGE, {
             message: CONTACT_SUCCESS_MESSAGE,
@@ -43,7 +66,6 @@ const createContact = async (req, res) => {
     }
 };
 
-// Get all contact messages with pagination
 const getAllMessages = async (req, res) => {
     try {
         const { page = 1, limit = 10 } = req.query;
