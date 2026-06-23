@@ -219,8 +219,7 @@ const buildEnquiryEmailHtml = ({ name, email, message, submittedAt }) => `<!DOCT
 </body>
 </html>`;
 
-const getInquiryRecipient = () =>
-    (process.env.INQUIRY_EMAIL || ENQUIRY_RECIPIENT).trim().replace(/['";]/g, '');
+const getInquiryRecipient = () => ENQUIRY_RECIPIENT;
 
 module.exports = {
     ENQUIRY_EMAIL_SUBJECT,
