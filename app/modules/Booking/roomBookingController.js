@@ -276,13 +276,20 @@ const createRoomBooking = async (req, res) => {
             });
         }
 
+        const cancelCartId = bookings.find((b) => b.cartId)?.cartId || cartId || null;
+        const baseCancelUrl = hubtelService.getHubtelConfig().cancellationUrl;
+        const cancellationUrl = cancelCartId
+            ? `${baseCancelUrl}?cartId=${encodeURIComponent(cancelCartId)}`
+            : baseCancelUrl;
+
         let hubtel;
         try {
             hubtel = await hubtelService.initiateCheckout({
                 totalAmount,
                 description: `1125 room booking ${sharedReference}`,
                 clientReference: sharedReference,
-                customerPhoneNumber: guest.mobileNumber
+                customerPhoneNumber: guest.mobileNumber,
+                cancellationUrl
             });
         } catch (paymentError) {
             await Booking.deleteMany({ _id: { $in: bookings.map((b) => b._id) } });

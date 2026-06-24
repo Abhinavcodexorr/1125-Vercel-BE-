@@ -168,7 +168,8 @@ const initiateCheckout = async ({
     totalAmount,
     description,
     clientReference,
-    customerPhoneNumber
+    customerPhoneNumber,
+    cancellationUrl
 }) => {
     const config = getHubtelConfig();
     const missing = getHubtelConfigErrors(config);
@@ -181,7 +182,7 @@ const initiateCheckout = async ({
         description: description || '1125 room booking',
         callbackUrl: config.callbackUrl,
         returnUrl: config.returnUrl,
-        cancellationUrl: config.cancellationUrl,
+        cancellationUrl: cancellationUrl || config.cancellationUrl,
         merchantAccountNumber: config.merchantAccountNumber,
         clientReference
     };
