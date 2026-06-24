@@ -84,25 +84,20 @@ const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
     String(new mongoose.Types.ObjectId(value)) === String(value);
 
-const buildGuestDetails = (guestDetails) => {
-    if (!guestDetails || !guestDetails.firstName || !guestDetails.lastName || !guestDetails.email) {
-        return null;
-    }
-    return {
-        firstName: String(guestDetails.firstName).trim(),
-        lastName: String(guestDetails.lastName).trim(),
-        email: String(guestDetails.email).trim(),
-        mobileNumber: String(guestDetails.mobileNumber || guestDetails.phone || '').trim(),
-        countryCode: guestDetails.countryCode ? String(guestDetails.countryCode) : undefined,
-        address1: guestDetails.address1 ? String(guestDetails.address1) : undefined,
-        address2: guestDetails.address2 ? String(guestDetails.address2) : undefined,
-        townOrCity: guestDetails.townOrCity ? String(guestDetails.townOrCity) : undefined,
-        state: guestDetails.state ? String(guestDetails.state) : undefined,
-        country: guestDetails.country ? String(guestDetails.country) : undefined,
-        pincode: guestDetails.pincode ? String(guestDetails.pincode) : undefined,
-        specialRequests: guestDetails.specialRequests ? String(guestDetails.specialRequests) : undefined
-    };
-};
+const buildGuestDetails = (guestDetails = {}) => ({
+    firstName: String(guestDetails.firstName || '').trim(),
+    lastName: String(guestDetails.lastName || '').trim(),
+    email: String(guestDetails.email || '').trim(),
+    mobileNumber: String(guestDetails.mobileNumber || guestDetails.phone || '').trim(),
+    countryCode: guestDetails.countryCode ? String(guestDetails.countryCode) : undefined,
+    address1: guestDetails.address1 ? String(guestDetails.address1) : undefined,
+    address2: guestDetails.address2 ? String(guestDetails.address2) : undefined,
+    townOrCity: guestDetails.townOrCity ? String(guestDetails.townOrCity) : undefined,
+    state: guestDetails.state ? String(guestDetails.state) : undefined,
+    country: guestDetails.country ? String(guestDetails.country) : undefined,
+    pincode: guestDetails.pincode ? String(guestDetails.pincode) : undefined,
+    specialRequests: guestDetails.specialRequests ? String(guestDetails.specialRequests) : undefined
+});
 
 const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     const input = {
@@ -177,9 +172,6 @@ const createRoomBooking = async (req, res) => {
     try {
         const { cartId, guestDetails, roomId } = req.body;
         const guest = buildGuestDetails(guestDetails);
-        if (!guest || !guest.mobileNumber) {
-            return response.error400(res, 'guestDetails with firstName, lastName, email, and mobileNumber are required');
-        }
 
         let bookings = [];
 
@@ -307,6 +299,9 @@ const createRoomBooking = async (req, res) => {
                 error.message || ''
             );
         if (isAvailabilityError) {
+            return response.error400(res, error.message);
+        }
+        if (/Hubtel|checkout|payment/i.test(error.message || '')) {
             return response.error400(res, error.message);
         }
         return response.serverError500(res, msg.NETWORK_ERROR, error.message);

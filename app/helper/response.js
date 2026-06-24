@@ -33,9 +33,11 @@ const response = {
             success: false,
             statusCode: 400,
             message: message,
-            error: error,
             timestamp: new Date().toISOString()
         };
+        if (error != null && error !== '') {
+            payload.error = error;
+        }
         if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
             Object.assign(payload, meta);
         }
