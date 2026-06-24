@@ -46,7 +46,18 @@ const roomBlockingBookingQuery = (roomId) => {
 };
 
 const BLOCKING_BOOKING_SELECT =
-    'roomId roomQuantity bookingReference checkInDate checkOutDate status paymentStatus adults children holdExpiresAt createdAt';
+    'roomId roomQuantity bookingReference cartId checkInDate checkOutDate status paymentStatus adults children holdExpiresAt createdAt';
+
+const isPendingRoomHold = (booking) =>
+    booking?.status === 'Pending' &&
+    ['incomplete', 'pending'].includes(booking?.paymentStatus) &&
+    Boolean(booking?.roomId);
+
+const shouldExcludeBookingForCart = (booking, excludeCartId) => {
+    if (!excludeCartId || !booking?.cartId) return false;
+    if (String(booking.cartId) !== String(excludeCartId)) return false;
+    return isPendingRoomHold(booking);
+};
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** How far ahead to list open dates (full array, not paginated). Override via ROOM_AVAILABILITY_DAYS in .env */
 const DEFAULT_AVAILABLE_HORIZON_DAYS =
@@ -137,15 +148,20 @@ const buildBookingCountByDate = (bookings) => {
 };
 
 const getAllRoomBlockingBookings = async (roomId, options = {}) => {
-    const { excludeBookingIds = [] } = options;
+    const { excludeBookingIds = [], excludeCartId = null } = options;
     const excludeSet = new Set(excludeBookingIds.map(String));
     const bookings = await Booking.find(roomBlockingBookingQuery(roomId))
         .select(BLOCKING_BOOKING_SELECT)
         .sort({ checkInDate: 1 })
         .lean();
 
-    if (!excludeSet.size) return bookings;
-    return bookings.filter((booking) => !excludeSet.has(String(booking._id)));
+    if (!excludeSet.size && !excludeCartId) return bookings;
+
+    return bookings.filter((booking) => {
+        if (excludeSet.has(String(booking._id))) return false;
+        if (shouldExcludeBookingForCart(booking, excludeCartId)) return false;
+        return true;
+    });
 };
 
 const getRoomBlockingBookingsByRoomIds = async (roomIds = []) => {
