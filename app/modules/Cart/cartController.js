@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const Cart = require('./cartModel');
-const Booking = require('../Booking/bookingModel');
 const response = require('../../helper/response');
 const msg = require('./cartMessages');
 const {
@@ -22,31 +21,6 @@ const getCartExpiry = () => {
 
 const findCart = async (cartId) => Cart.findOne({ cartId });
 
-const getPendingBookingForCart = async (cartId) => {
-    if (!cartId) return null;
-
-    const bookings = await Booking.find({
-        cartId,
-        isDeleted: false,
-        status: 'Pending',
-        paymentStatus: { $in: ['pending', 'incomplete'] }
-    })
-        .sort({ createdAt: -1 })
-        .lean();
-
-    if (!bookings.length) return null;
-
-    const totalAmount = bookings.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
-
-    return {
-        bookingReference: bookings[0].bookingReference,
-        paymentStatus: bookings[0].paymentStatus,
-        holdExpiresAt: bookings[0].holdExpiresAt || null,
-        totalAmount: Number(totalAmount.toFixed(2)),
-        currency: bookings[0].currency
-    };
-};
-
 const addToCart = async (req, res) => {
     try {
         const { roomId, cartId } = req.body;
@@ -66,9 +40,7 @@ const addToCart = async (req, res) => {
             return response.error400(res, msg.ADULTS_REQUIRED);
         }
 
-        const evaluation = await evaluateCartItemAvailability(roomId, input, {
-            excludeCartId: cartId || null
-        });
+        const evaluation = await evaluateCartItemAvailability(roomId, input);
         if (evaluation.invalidQuantity) {
             return response.error400(res, msg.QUANTITY_MIN);
         }
@@ -120,13 +92,10 @@ const getCart = async (req, res) => {
             return response.notFound404(res, msg.CART_NOT_FOUND);
         }
 
-        await refreshCartAvailability(cart, { excludeCartId: cart.cartId });
+        await refreshCartAvailability(cart);
         await cart.save();
 
-        const shaped = shapeCartResponse(cart);
-        shaped.pendingBooking = await getPendingBookingForCart(cart.cartId);
-
-        return response.success200(res, msg.CART_RETRIEVED, shaped);
+        return response.success200(res, msg.CART_RETRIEVED, shapeCartResponse(cart));
     } catch (error) {
         console.error('Get cart error:', error.message);
         return response.serverError500(res, msg.NETWORK_ERROR, error.message);
@@ -143,7 +112,7 @@ const checkCartAvailability = async (req, res) => {
             return response.error400(res, msg.CART_EMPTY);
         }
 
-        await refreshCartAvailability(cart, { excludeCartId: cart.cartId });
+        await refreshCartAvailability(cart);
         await cart.save();
 
         const shaped = shapeCartResponse(cart);
