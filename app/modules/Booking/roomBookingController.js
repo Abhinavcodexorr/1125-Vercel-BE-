@@ -2,9 +2,7 @@ const mongoose = require('mongoose');
 const Booking = require('./bookingModel');
 const Cart = require('../Cart/cartModel');
 const response = require('../../helper/response');
-// Hubtel payment — disabled on create for now; callback routes still use hubtelService
 const hubtelService = require('./hubtelService');
-// const { isHubtelEnabled } = require('../../config/hubtel.config');
 const {
     parseCartItemInput,
     evaluateCartItemAvailability,
@@ -12,7 +10,12 @@ const {
     shapeCartResponse,
     getCartItemUnavailableMessage
 } = require('../Cart/cartHelper');
-const { formatRoomNotAvailableForDates, getAllRoomBlockingBookings, computeNights } = require('../Rooms/roomAvailabilityHelper');
+const {
+    formatRoomNotAvailableForDates,
+    getAllRoomBlockingBookings,
+    computeNights,
+    getHoldExpiresAt
+} = require('../Rooms/roomAvailabilityHelper');
 const msg = require('../Cart/cartMessages');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
@@ -142,10 +145,9 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         totalAmount: subTotal,
         currency: normalizeCurrencyCode(item.currency || evaluation.room.currency),
         paymentMethod: 'Hubtel',
-        status: 'Confirmed',
-        paymentStatus: 'paid',
-        paymentDate: new Date(),
-        holdExpiresAt: null
+        status: 'Pending',
+        paymentStatus: 'pending',
+        holdExpiresAt: getHoldExpiresAt()
     });
 
     await booking.save();
@@ -259,27 +261,26 @@ const createRoomBooking = async (req, res) => {
             });
         }
 
-        // --- Hubtel checkout (disabled for now) ---
-        // let hubtel;
-        // try {
-        //     hubtel = await hubtelService.initiateCheckout({
-        //         totalAmount,
-        //         description: `1125 room booking ${sharedReference}`,
-        //         clientReference: sharedReference,
-        //         customerPhoneNumber: guest.mobileNumber
-        //     });
-        // } catch (paymentError) {
-        //     await Booking.deleteMany({ _id: { $in: bookings.map((b) => b._id) } });
-        //     throw paymentError;
-        // }
-        //
-        // await Booking.updateMany(
-        //     { _id: { $in: bookings.map((b) => b._id) } },
-        //     {
-        //         paymentStatus: 'pending',
-        //         paymentResponse: hubtel.raw
-        //     }
-        // );
+        let hubtel;
+        try {
+            hubtel = await hubtelService.initiateCheckout({
+                totalAmount,
+                description: `1125 room booking ${sharedReference}`,
+                clientReference: sharedReference,
+                customerPhoneNumber: guest.mobileNumber
+            });
+        } catch (paymentError) {
+            await Booking.deleteMany({ _id: { $in: bookings.map((b) => b._id) } });
+            throw paymentError;
+        }
+
+        await Booking.updateMany(
+            { _id: { $in: bookings.map((b) => b._id) } },
+            {
+                paymentStatus: 'pending',
+                paymentResponse: hubtel.raw
+            }
+        );
 
         try {
             await notifyBookingCreatedEmails(bookings);
@@ -287,14 +288,15 @@ const createRoomBooking = async (req, res) => {
             console.error('Create room booking email notification error:', emailError.message);
         }
 
-        return response.created201(res, 'Booking successful.', {
+        return response.created201(res, 'Booking created. Complete payment to confirm.', {
             bookingReference: sharedReference,
             bookingIds: bookings.map((b) => b._id),
             totalAmount: Number(totalAmount.toFixed(2)),
             currency: bookings[0].currency,
             paymentMethod: bookings[0].paymentMethod,
-            status: 'Confirmed',
-            paymentStatus: 'paid',
+            checkoutUrl: hubtel.checkoutUrl,
+            status: 'Pending',
+            paymentStatus: 'pending',
             bookings: bookings.map((b) => b.getFormattedBooking())
         });
     } catch (error) {

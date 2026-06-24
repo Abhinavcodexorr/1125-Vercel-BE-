@@ -29,8 +29,8 @@ const HUBTEL_INITIATE_URL = 'https://payproxyapi.hubtel.com/items/initiate';
 const HUBTEL_STATUS_URL_BASE = 'https://api-txnstatus.hubtel.com/transactions';
 const HUBTEL_CALLBACK_URL =
     'https://one125-vercel-be-g0yd.onrender.com/api/v1/booking/hubtel/callback';
-const HUBTEL_RETURN_URL = 'http://localhost:3001/thank-you';
-const HUBTEL_CANCELLATION_URL = 'https://1125-beach-zeta.vercel.app/';
+const HUBTEL_RETURN_URL = 'https://1125-website.vercel.app/thank-you';
+const HUBTEL_CANCELLATION_URL = 'https://1125-website.vercel.app/accommodations';
 
 const getHubtelSettings = () => {
     const apiId = stripEnv(process.env.HUBTEL_API_ID || process.env.HUBTEL_CLIENT_ID);
