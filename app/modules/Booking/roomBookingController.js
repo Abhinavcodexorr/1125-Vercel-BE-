@@ -84,6 +84,18 @@ const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
     String(new mongoose.Types.ObjectId(value)) === String(value);
 
+const clearCartAfterSuccessfulPayment = async (bookings) => {
+    const cartId = bookings.find((b) => b.cartId)?.cartId;
+    if (!cartId) return;
+
+    const cart = await Cart.findOne({ cartId });
+    if (!cart) return;
+
+    cart.items = [];
+    cart.subTotal = 0;
+    await cart.save();
+};
+
 const buildGuestDetails = (guestDetails = {}) => ({
     firstName: String(guestDetails.firstName || '').trim(),
     lastName: String(guestDetails.lastName || '').trim(),
@@ -196,10 +208,6 @@ const createRoomBooking = async (req, res) => {
                 const booking = await createBookingFromCartItem(item, guest, cartId);
                 bookings.push(booking);
             }
-
-            cart.items = [];
-            cart.subTotal = 0;
-            await cart.save();
         } else if (roomId) {
             const input = parseCartItemInput(req.body);
 
@@ -354,6 +362,7 @@ const handleHubtelCallback = async (req, res) => {
 
         if (verified && !wasPaid) {
             const refreshed = await Booking.find({ bookingReference: clientReference, isDeleted: false });
+            await clearCartAfterSuccessfulPayment(refreshed);
             await notifyBookingPaidEmails(refreshed);
         }
 
@@ -380,6 +389,7 @@ const confirmHubtelBooking = async (req, res) => {
         const booking = bookings[0];
 
         if (booking.paymentStatus === 'paid') {
+            await clearCartAfterSuccessfulPayment(bookings);
             return response.success200(res, 'Booking payment status checked', {
                 isPaid: true,
                 status: 'Paid',
@@ -397,6 +407,7 @@ const confirmHubtelBooking = async (req, res) => {
         const refreshed = await Booking.find({ bookingReference: reference, isDeleted: false });
 
         if (statusCheck.isPaid) {
+            await clearCartAfterSuccessfulPayment(refreshed);
             await notifyBookingPaidEmails(refreshed);
         }
 
