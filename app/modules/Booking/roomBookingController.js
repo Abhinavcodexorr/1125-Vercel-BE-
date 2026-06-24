@@ -382,49 +382,34 @@ const confirmHubtelBooking = async (req, res) => {
             return response.notFound404(res, 'Booking not found');
         }
 
-        const wasPaid = bookings[0].paymentStatus === 'paid';
-        let statusCheck = hubtelService.resolveStatusFromBooking(bookings[0]);
-        let hubtelVerifyError = null;
+        const booking = bookings[0];
 
-        if (!statusCheck?.isPaid) {
-            try {
-                statusCheck = await hubtelService.verifyTransaction(reference, bookings[0]);
-            } catch (verifyError) {
-                hubtelVerifyError = verifyError.message;
-                console.error('Hubtel verifyTransaction failed:', verifyError.message);
-                statusCheck = hubtelService.resolveStatusFromBooking(bookings[0]);
-            }
+        if (booking.paymentStatus === 'paid') {
+            return response.success200(res, 'Booking payment status checked', {
+                isPaid: true,
+                status: 'Paid',
+                source: 'database',
+                hubtelVerifyError: null,
+                bookings: bookings.map((b) => b.getFormattedBooking())
+            });
         }
 
-        if (statusCheck?.isPaid) {
-            await Booking.updateMany(
-                { bookingReference: reference, isDeleted: false },
-                {
-                    paymentStatus: 'paid',
-                    status: 'Confirmed',
-                    paymentDate: new Date(),
-                    ...(statusCheck.raw ? { paymentResponse: statusCheck.raw } : {})
-                }
-            );
-        } else if (statusCheck?.isFailed && bookings[0].paymentStatus !== 'paid') {
-            await Booking.updateMany(
-                { bookingReference: reference, isDeleted: false },
-                { paymentStatus: 'failed' }
-            );
-        }
+        const statusCheck = await hubtelService.verifyTransaction(reference, booking);
+        const update = hubtelService.buildBookingUpdateFromHubtelStatus(statusCheck);
+
+        await Booking.updateMany({ bookingReference: reference, isDeleted: false }, update);
 
         const refreshed = await Booking.find({ bookingReference: reference, isDeleted: false });
-        const finalStatus = hubtelService.resolveStatusFromBooking(refreshed[0]);
 
-        if (finalStatus?.isPaid && !wasPaid) {
+        if (statusCheck.isPaid) {
             await notifyBookingPaidEmails(refreshed);
         }
 
         return response.success200(res, 'Booking payment status checked', {
-            isPaid: Boolean(finalStatus?.isPaid),
-            status: finalStatus?.status || 'unknown',
-            source: finalStatus?.source || 'database',
-            hubtelVerifyError,
+            isPaid: Boolean(statusCheck.isPaid),
+            status: statusCheck.status || 'unknown',
+            source: 'hubtel-api',
+            hubtelVerifyError: null,
             bookings: refreshed.map((b) => b.getFormattedBooking())
         });
     } catch (error) {

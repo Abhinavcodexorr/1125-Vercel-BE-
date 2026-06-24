@@ -130,6 +130,40 @@ const parseStatusApiResponse = (responseData) => {
     };
 };
 
+const buildBookingUpdateFromHubtelStatus = (statusCheck) => {
+    const hubtelStatus = normalizeHubtelStatus(statusCheck?.status);
+    const payload = statusCheck?.raw?.data || statusCheck?.raw?.Data || statusCheck?.raw || {};
+    const update = {};
+
+    if (statusCheck?.raw) {
+        update.paymentResponse = statusCheck.raw;
+    }
+
+    const transactionId =
+        payload.TransactionId ||
+        payload.transactionId ||
+        payload.hubtelTransactionId ||
+        payload.HubtelTransactionId;
+    if (transactionId) {
+        update.transactionId = String(transactionId);
+    }
+
+    if (isPaidStatus(hubtelStatus)) {
+        update.paymentStatus = 'paid';
+        update.status = 'Confirmed';
+        update.paymentDate = new Date();
+    } else if (hubtelStatus === 'refunded') {
+        update.paymentStatus = 'refunded';
+    } else if (isFailedStatus(hubtelStatus)) {
+        update.paymentStatus = 'failed';
+    } else {
+        update.paymentStatus = 'pending';
+        update.status = 'Pending';
+    }
+
+    return update;
+};
+
 const initiateCheckout = async ({
     totalAmount,
     description,
@@ -234,7 +268,7 @@ const verifyTransaction = async (clientReference, booking = null) => {
 
             if (response.status === 401 || response.status === 403) {
                 lastError = new Error(
-                    `Hubtel status API unauthorized (${response.status}). Check HUBTEL_API_ID and HUBTEL_API_KEY on the server.`
+                    `Hubtel status API denied (${response.status}). Transaction status may not be enabled for your API keys — contact Hubtel support. URL: ${url}`
                 );
                 continue;
             }
@@ -268,5 +302,6 @@ module.exports = {
     isPaidCallback,
     resolveStatusFromBooking,
     resolveStatusFromPaymentResponse,
+    buildBookingUpdateFromHubtelStatus,
     isPaidStatus
 };
