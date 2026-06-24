@@ -90,7 +90,9 @@ const evaluateCartItemAvailability = async (roomId, input, options = {}) => {
         validStayDates: input.checkOutDate > input.checkInDate
     };
 
-    const bookings = await getAllRoomBlockingBookings(room._id);
+    const bookings = await getAllRoomBlockingBookings(room._id, {
+        excludeCartId: options.excludeCartId || null
+    });
     const stayEval = evaluateRoomStay(room, bookings, stay, options);
 
     return {

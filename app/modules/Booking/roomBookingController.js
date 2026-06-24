@@ -84,6 +84,29 @@ const isObjectId = (value) =>
     mongoose.Types.ObjectId.isValid(value) &&
     String(new mongoose.Types.ObjectId(value)) === String(value);
 
+const clearCartAfterSuccessfulPayment = async (bookings) => {
+    const cartId = bookings.find((b) => b.cartId)?.cartId;
+    if (!cartId) return;
+
+    const cart = await Cart.findOne({ cartId });
+    if (!cart) return;
+
+    cart.items = [];
+    cart.subTotal = 0;
+    await cart.save();
+};
+
+/** Remove the cart owner's earlier unpaid hold so re-creating (e.g. after editing) replaces it instead of stacking. */
+const removePreviousPendingBookingsForCart = async (cartId) => {
+    if (!cartId) return;
+    await Booking.deleteMany({
+        cartId,
+        isDeleted: false,
+        status: 'Pending',
+        paymentStatus: { $in: ['pending', 'incomplete'] }
+    });
+};
+
 const buildGuestDetails = (guestDetails = {}) => ({
     firstName: String(guestDetails.firstName || '').trim(),
     lastName: String(guestDetails.lastName || '').trim(),
@@ -100,6 +123,7 @@ const buildGuestDetails = (guestDetails = {}) => ({
 });
 
 const createBookingFromCartItem = async (item, guestDetails, cartId) => {
+    const cartOptions = cartId ? { excludeCartId: cartId } : {};
     const input = {
         checkInDate: item.checkInDate,
         checkOutDate: item.checkOutDate,
@@ -108,7 +132,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         quantity: item.quantity
     };
 
-    const evaluation = await evaluateCartItemAvailability(item.roomId, input);
+    const evaluation = await evaluateCartItemAvailability(item.roomId, input, cartOptions);
     if (!evaluation.ok || !evaluation.room) {
         throw new Error(evaluation.message || msg.ROOM_NOT_FOUND);
     }
@@ -157,7 +181,8 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         validStayDates: item.checkOutDate > item.checkInDate
     };
     const blockingBookings = await getAllRoomBlockingBookings(item.roomId, {
-        excludeBookingIds: [booking._id]
+        excludeBookingIds: [booking._id],
+        excludeCartId: cartId || null
     });
     const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay);
     if (!postSaveEval.isAvailable) {
@@ -181,25 +206,23 @@ const createRoomBooking = async (req, res) => {
                 return response.error400(res, 'Cart is empty or not found');
             }
 
-            await refreshCartAvailability(cart);
+            await refreshCartAvailability(cart, { excludeCartId: cart.cartId });
             if (!cart.items.every((item) => item.isAvailable)) {
                 const unavailableItem = cart.items.find((item) => !item.isAvailable);
                 const unavailableMessage = unavailableItem
-                    ? await getCartItemUnavailableMessage(unavailableItem)
+                    ? await getCartItemUnavailableMessage(unavailableItem, { excludeCartId: cart.cartId })
                     : 'One or more cart items are not available';
                 return response.error400(res, unavailableMessage, null, {
                     data: shapeCartResponse(cart)
                 });
             }
 
+            await removePreviousPendingBookingsForCart(cartId);
+
             for (const item of cart.items) {
                 const booking = await createBookingFromCartItem(item, guest, cartId);
                 bookings.push(booking);
             }
-
-            cart.items = [];
-            cart.subTotal = 0;
-            await cart.save();
         } else if (roomId) {
             const input = parseCartItemInput(req.body);
 
@@ -354,6 +377,7 @@ const handleHubtelCallback = async (req, res) => {
 
         if (verified && !wasPaid) {
             const refreshed = await Booking.find({ bookingReference: clientReference, isDeleted: false });
+            await clearCartAfterSuccessfulPayment(refreshed);
             await notifyBookingPaidEmails(refreshed);
         }
 
@@ -380,6 +404,7 @@ const confirmHubtelBooking = async (req, res) => {
         const booking = bookings[0];
 
         if (booking.paymentStatus === 'paid') {
+            await clearCartAfterSuccessfulPayment(bookings);
             return response.success200(res, 'Booking payment status checked', {
                 isPaid: true,
                 status: 'Paid',
@@ -397,6 +422,7 @@ const confirmHubtelBooking = async (req, res) => {
         const refreshed = await Booking.find({ bookingReference: reference, isDeleted: false });
 
         if (statusCheck.isPaid) {
+            await clearCartAfterSuccessfulPayment(refreshed);
             await notifyBookingPaidEmails(refreshed);
         }
 

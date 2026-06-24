@@ -11,11 +11,11 @@ const {
     shapeCartResponse
 } = require('./cartHelper');
 
-const CART_TTL_HOURS = 72;
+const CART_TTL_MINUTES = 30;
 
 const getCartExpiry = () => {
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + CART_TTL_HOURS);
+    expiresAt.setMinutes(expiresAt.getMinutes() + CART_TTL_MINUTES);
     return expiresAt;
 };
 
@@ -40,7 +40,9 @@ const addToCart = async (req, res) => {
             return response.error400(res, msg.ADULTS_REQUIRED);
         }
 
-        const evaluation = await evaluateCartItemAvailability(roomId, input);
+        const evaluation = await evaluateCartItemAvailability(roomId, input, {
+            excludeCartId: cartId || null
+        });
         if (evaluation.invalidQuantity) {
             return response.error400(res, msg.QUANTITY_MIN);
         }
@@ -71,7 +73,7 @@ const addToCart = async (req, res) => {
                 expiresAt: getCartExpiry()
             });
         } else {
-            cart.items.push(cartItem);
+            cart.items = [cartItem];
             cart.expiresAt = getCartExpiry();
         }
 
@@ -92,7 +94,7 @@ const getCart = async (req, res) => {
             return response.notFound404(res, msg.CART_NOT_FOUND);
         }
 
-        await refreshCartAvailability(cart);
+        await refreshCartAvailability(cart, { excludeCartId: cart.cartId });
         await cart.save();
 
         return response.success200(res, msg.CART_RETRIEVED, shapeCartResponse(cart));
@@ -112,7 +114,7 @@ const checkCartAvailability = async (req, res) => {
             return response.error400(res, msg.CART_EMPTY);
         }
 
-        await refreshCartAvailability(cart);
+        await refreshCartAvailability(cart, { excludeCartId: cart.cartId });
         await cart.save();
 
         const shaped = shapeCartResponse(cart);
