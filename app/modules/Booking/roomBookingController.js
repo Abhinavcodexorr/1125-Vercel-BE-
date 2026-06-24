@@ -278,7 +278,8 @@ const createRoomBooking = async (req, res) => {
             { _id: { $in: bookings.map((b) => b._id) } },
             {
                 paymentStatus: 'pending',
-                paymentResponse: hubtel.raw
+                paymentResponse: hubtel.raw,
+                transactionId: hubtel.checkoutId || bookings[0].transactionId
             }
         );
 
@@ -331,8 +332,12 @@ const handleHubtelCallback = async (req, res) => {
 
         let verified = hubtelService.isPaidCallback(body);
         if (!verified) {
-            const statusCheck = await hubtelService.verifyTransaction(clientReference);
-            verified = statusCheck.isPaid;
+            try {
+                const statusCheck = await hubtelService.verifyTransaction(clientReference, bookings[0]);
+                verified = statusCheck.isPaid;
+            } catch (verifyError) {
+                console.error('Hubtel callback status verify failed:', verifyError.message);
+            }
         }
 
         const update = {
@@ -371,7 +376,6 @@ const confirmHubtelBooking = async (req, res) => {
             return response.error400(res, 'reference is required');
         }
 
-        const statusCheck = await hubtelService.verifyTransaction(reference);
         const bookings = await Booking.find({ bookingReference: reference, isDeleted: false });
 
         if (!bookings.length) {
@@ -379,27 +383,48 @@ const confirmHubtelBooking = async (req, res) => {
         }
 
         const wasPaid = bookings[0].paymentStatus === 'paid';
+        let statusCheck = hubtelService.resolveStatusFromBooking(bookings[0]);
+        let hubtelVerifyError = null;
 
-        if (statusCheck.isPaid) {
+        if (!statusCheck?.isPaid) {
+            try {
+                statusCheck = await hubtelService.verifyTransaction(reference, bookings[0]);
+            } catch (verifyError) {
+                hubtelVerifyError = verifyError.message;
+                console.error('Hubtel verifyTransaction failed:', verifyError.message);
+                statusCheck = hubtelService.resolveStatusFromBooking(bookings[0]);
+            }
+        }
+
+        if (statusCheck?.isPaid) {
             await Booking.updateMany(
                 { bookingReference: reference, isDeleted: false },
                 {
                     paymentStatus: 'paid',
                     status: 'Confirmed',
                     paymentDate: new Date(),
-                    paymentResponse: statusCheck.raw
+                    ...(statusCheck.raw ? { paymentResponse: statusCheck.raw } : {})
                 }
+            );
+        } else if (statusCheck?.isFailed && bookings[0].paymentStatus !== 'paid') {
+            await Booking.updateMany(
+                { bookingReference: reference, isDeleted: false },
+                { paymentStatus: 'failed' }
             );
         }
 
         const refreshed = await Booking.find({ bookingReference: reference, isDeleted: false });
-        if (statusCheck.isPaid && !wasPaid) {
+        const finalStatus = hubtelService.resolveStatusFromBooking(refreshed[0]);
+
+        if (finalStatus?.isPaid && !wasPaid) {
             await notifyBookingPaidEmails(refreshed);
         }
 
         return response.success200(res, 'Booking payment status checked', {
-            isPaid: statusCheck.isPaid,
-            status: statusCheck.status,
+            isPaid: Boolean(finalStatus?.isPaid),
+            status: finalStatus?.status || 'unknown',
+            source: finalStatus?.source || 'database',
+            hubtelVerifyError,
             bookings: refreshed.map((b) => b.getFormattedBooking())
         });
     } catch (error) {
