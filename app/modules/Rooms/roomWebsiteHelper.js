@@ -20,7 +20,8 @@ const {
 const {
     getRoomWdPrice,
     getRoomWePrice,
-    resolveRoomPriceForDay
+    resolveRoomPriceForDay,
+    computeStayPricing
 } = require('./roomPricingHelper');
 
 const parsePositiveInt = (value, fallback) => {
@@ -137,7 +138,20 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
     }
 
     result.nights = computeNights(stay.checkInDate, stay.checkOutDate);
-    result.subTotal = (Number(room.price) || 0) * result.nights * requestedQuantity;
+    const pricing = computeStayPricing(
+        room,
+        stay.checkInDate,
+        stay.checkOutDate,
+        requestedQuantity
+    );
+    result.subTotal = pricing.subTotal;
+    result.wdNights = pricing.wdNights;
+    result.weNights = pricing.weNights;
+    result.wdPrice = pricing.wdPrice;
+    result.wePrice = pricing.wePrice;
+    result.avgPricePerNight = pricing.avgPricePerNight;
+    result.nightlyTotal = pricing.nightlyTotal;
+    result.nightBreakdown = pricing.nightBreakdown;
 
     const quantityStatus = getStayQuantityStatus(
         room,
@@ -194,6 +208,12 @@ const shapeStayEvalForWebsite = (stayEval) => ({
     maxGuestsPerChalet: stayEval.maxGuestsPerChalet ?? null,
     maxTotalGuests: stayEval.maxTotalGuests ?? null,
     nights: stayEval.nights,
+    wdNights: stayEval.wdNights ?? 0,
+    weNights: stayEval.weNights ?? 0,
+    wdPrice: stayEval.wdPrice ?? null,
+    wePrice: stayEval.wePrice ?? null,
+    avgPricePerNight: stayEval.avgPricePerNight ?? null,
+    nightBreakdown: stayEval.nightBreakdown ?? [],
     subTotal: stayEval.subTotal,
     conflictingBooking: stayEval.conflictingBooking || null,
     unavailableReason: stayEval.unavailableReason || null,

@@ -8,6 +8,7 @@ const {
 } = require('../Rooms/roomAvailabilityHelper');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 const { normalizeCurrencyCode, shapeMoneyFields } = require('../../helper/currencyHelper');
+const { getRoomWdPrice, getRoomWePrice } = require('../Rooms/roomPricingHelper');
 const msg = require('./cartMessages');
 
 const isObjectId = (value) =>
@@ -105,8 +106,8 @@ const evaluateCartItemAvailability = async (roomId, input, options = {}) => {
 };
 
 const buildCartItemFromEvaluation = (room, input, stayEval) => {
-    const nights = computeNights(input.checkInDate, input.checkOutDate);
-    const pricePerNight = Number(room.price) || 0;
+    const nights = stayEval.nights ?? computeNights(input.checkInDate, input.checkOutDate);
+    const pricePerNight = stayEval.avgPricePerNight ?? Number(room.price) || 0;
     const money = shapeMoneyFields(pricePerNight, room.currency);
 
     return {
@@ -116,6 +117,8 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
             slug: room.slug,
             type: room.type,
             price: pricePerNight,
+            wdPrice: stayEval.wdPrice ?? getRoomWdPrice(room),
+            wePrice: stayEval.wePrice ?? getRoomWePrice(room),
             ...money,
             guests: room.guests,
             quantity: room.quantity || 1,
@@ -127,6 +130,9 @@ const buildCartItemFromEvaluation = (room, input, stayEval) => {
         children: input.children,
         quantity: stayEval.requestedQuantity || input.quantity || 1,
         nights,
+        wdNights: stayEval.wdNights ?? 0,
+        weNights: stayEval.weNights ?? 0,
+        nightBreakdown: stayEval.nightBreakdown ?? [],
         pricePerNight,
         subTotal: stayEval.subTotal,
         ...money,
@@ -207,6 +213,9 @@ const shapeCartResponse = (cart) => ({
             children: item.children,
             quantity: item.quantity,
             nights: item.nights,
+            wdNights: item.wdNights ?? 0,
+            weNights: item.weNights ?? 0,
+            nightBreakdown: item.nightBreakdown ?? [],
             pricePerNight: item.pricePerNight,
             subTotal: item.subTotal,
             ...itemMoney,

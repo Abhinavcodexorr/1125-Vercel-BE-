@@ -500,7 +500,10 @@ const checkRoomStayAvailability = async (req, res) => {
         const stayEval = evaluateRoomStay(room, bookings, stay);
 
         const { amount: todayPrice } = resolveRoomPriceForDay(room, clientTz);
-        const money = shapeMoneyFields(todayPrice, room.currency);
+        const money = shapeMoneyFields(
+            stayEval.avgPricePerNight ?? todayPrice,
+            room.currency
+        );
         const payload = {
             ...shapeStayEvalForWebsite(stayEval),
             roomId: room._id,
@@ -510,7 +513,7 @@ const checkRoomStayAvailability = async (req, res) => {
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
             children: stay.children,
-            pricePerNight: todayPrice,
+            pricePerNight: stayEval.avgPricePerNight ?? todayPrice,
             totalAmount: stayEval.subTotal,
             rateMeta: shapeRateMeta(clientTz, new Date(), tzCtx),
             ...money
