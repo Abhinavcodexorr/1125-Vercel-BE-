@@ -4,6 +4,8 @@ module.exports = {
     TYPE_REQUIRED: 'type is required',
     TYPE_EMPTY: 'type cannot be empty',
     PRICE_REQUIRED: 'Valid price is required',
+    WDP_PRICE_INVALID: 'Valid weekday price (wdPrice) is required',
+    WEP_PRICE_INVALID: 'Valid weekend price (wePrice) is required',
     GUESTS_MIN: 'guests must be at least 1',
     QUANTITY_MIN: 'quantity must be at least 1',
     QUANTITY_BELOW_BOOKINGS: 'quantity cannot be reduced below existing bookings for overlapping dates',

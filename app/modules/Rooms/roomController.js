@@ -62,6 +62,18 @@ const ensureUniqueSlug = async (rawSlug, excludeId = null) => {
 
 const resolveRoom = async (param) => Room.findOne(buildRoomLookup(param));
 
+const parseOptionalPrice = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const num = parseFloat(value);
+    return isNaN(num) || num < 0 ? undefined : num;
+};
+
+const resolveWeekdayPriceInput = (body) =>
+    parseOptionalPrice(body.wdPrice ?? body.weekdayPrice);
+
+const resolveWeekendPriceInput = (body) =>
+    parseOptionalPrice(body.wePrice ?? body.weekendPrice);
+
 const createRoom = async (req, res) => {
     try {
         const { title, slug, type, description, price, currency, guests, quantity, size, unit, amenities, images, isActive } = req.body;
@@ -76,6 +88,16 @@ const createRoom = async (req, res) => {
         if (isNaN(priceNum) || priceNum < 0) {
             return response.error400(res, msg.PRICE_REQUIRED);
         }
+        const wdPriceInput = resolveWeekdayPriceInput(req.body);
+        if (wdPriceInput === undefined) {
+            return response.error400(res, msg.WDP_PRICE_INVALID);
+        }
+        const wePriceInput = resolveWeekendPriceInput(req.body);
+        if (wePriceInput === undefined) {
+            return response.error400(res, msg.WEP_PRICE_INVALID);
+        }
+        const weekdayPriceNum = wdPriceInput != null ? wdPriceInput : priceNum;
+        const weekendPriceNum = wePriceInput != null ? wePriceInput : priceNum;
         const guestsNum = parseInt(guests, 10);
         if (isNaN(guestsNum) || guestsNum < 1) {
             return response.error400(res, msg.GUESTS_MIN);
@@ -125,6 +147,8 @@ const createRoom = async (req, res) => {
             type: String(type).trim(),
             description: description != null ? String(description) : '',
             price: priceNum,
+            weekdayPrice: weekdayPriceNum,
+            weekendPrice: weekendPriceNum,
             currency: roomCurrency,
             guests: guestsNum,
             quantity: quantityNum,
@@ -209,6 +233,16 @@ const updateRoom = async (req, res) => {
             const priceNum = parseFloat(price);
             if (isNaN(priceNum) || priceNum < 0) return response.error400(res, msg.PRICE_REQUIRED);
             updateData.price = priceNum;
+        }
+        if (req.body.wdPrice !== undefined || req.body.weekdayPrice !== undefined) {
+            const wdPriceNum = resolveWeekdayPriceInput(req.body);
+            if (wdPriceNum === undefined) return response.error400(res, msg.WDP_PRICE_INVALID);
+            updateData.weekdayPrice = wdPriceNum;
+        }
+        if (req.body.wePrice !== undefined || req.body.weekendPrice !== undefined) {
+            const wePriceNum = resolveWeekendPriceInput(req.body);
+            if (wePriceNum === undefined) return response.error400(res, msg.WEP_PRICE_INVALID);
+            updateData.weekendPrice = wePriceNum;
         }
         if (currency !== undefined) {
             updateData.currency = normalizeCurrencyCode(currency);
