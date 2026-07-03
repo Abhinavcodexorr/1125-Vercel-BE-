@@ -17,6 +17,11 @@ const {
     CURRENCY_SYMBOLS,
     shapeMoneyFields
 } = require('../../helper/currencyHelper');
+const {
+    getRoomWdPrice,
+    getRoomWePrice,
+    resolveRoomPriceForDay
+} = require('./roomPricingHelper');
 
 const parsePositiveInt = (value, fallback) => {
     const num = parseInt(value, 10);
@@ -230,8 +235,11 @@ const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
     };
 };
 
-const shapeRoomBaseForWebsite = (room) => {
-    const money = shapeMoneyFields(room.price, room.currency);
+const shapeRoomBaseForWebsite = (room, timezone) => {
+    const wdPrice = getRoomWdPrice(room);
+    const wePrice = getRoomWePrice(room);
+    const { amount: todayPrice, dayType, tz, localDay } = resolveRoomPriceForDay(room, timezone);
+    const money = shapeMoneyFields(todayPrice, room.currency);
 
     return {
         _id: room._id,
@@ -242,8 +250,13 @@ const shapeRoomBaseForWebsite = (room) => {
         description: room.description || '',
         size: room.size,
         unit: room.unit || 'sq ft',
-        pricePerNight: room.price,
-        price: room.price,
+        wdPrice,
+        wePrice,
+        dayType,
+        localDay,
+        tz,
+        pricePerNight: todayPrice,
+        price: todayPrice,
         ...money,
         guests: room.guests,
         quantity: getRoomQuantity(room),

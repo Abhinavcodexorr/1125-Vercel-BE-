@@ -22,6 +22,7 @@ const {
     filterRoomsForStay,
     evaluateRoomStay
 } = require('./roomWebsiteHelper');
+const { resolveRoomPriceForDay, shapeRateMeta, resolveRequestTimezone } = require('./roomPricingHelper');
 
 const slugify = (value) =>
     String(value || '')
@@ -379,6 +380,8 @@ const deleteRoom = async (req, res) => {
 
 const getRoomsForWebsite = async (req, res) => {
     try {
+        const tzCtx = resolveRequestTimezone(req);
+        const clientTz = tzCtx.tz;
         const stay = parseStayQuery(req.query);
 
         if (stay.hasStayDates && !stay.validStayDates) {
@@ -423,10 +426,11 @@ const getRoomsForWebsite = async (req, res) => {
         const start = (stay.page - 1) * stay.limit;
         const paginated = shaped
             .slice(start, start + stay.limit)
-            .map(({ rawRoom, stayEval }) => attachStayAvailabilityToRoom(rawRoom, stay, stayEval));
+            .map(({ rawRoom, stayEval }) => attachStayAvailabilityToRoom(rawRoom, stay, stayEval, clientTz));
 
         return res.status(200).json({
             success: true,
+            rateMeta: shapeRateMeta(clientTz, new Date(), tzCtx),
             totalItems,
             page: stay.page,
             limit: stay.limit,
@@ -440,6 +444,8 @@ const getRoomsForWebsite = async (req, res) => {
 
 const getRoomByIdForWebsite = async (req, res) => {
     try {
+        const tzCtx = resolveRequestTimezone(req);
+        const clientTz = tzCtx.tz;
         const stay = parseStayQuery(req.query);
         const room = await Room.findOne(buildRoomLookup(req.params.id, { isActive: true })).lean();
 
@@ -451,15 +457,16 @@ const getRoomByIdForWebsite = async (req, res) => {
             return response.error400(res, msg.STAY_DATES_INVALID);
         }
 
-        let data = shapeRoomBaseForWebsite(room);
+        let data = shapeRoomBaseForWebsite(room, clientTz);
         if (stay.hasStayDates && stay.validStayDates) {
             const bookings = await getAllRoomBlockingBookings(room._id);
             const stayEval = evaluateRoomStay(room, bookings, stay);
-            data = attachStayAvailabilityToRoom(room, stay, stayEval);
+            data = attachStayAvailabilityToRoom(room, stay, stayEval, clientTz);
         }
 
         return res.status(200).json({
             success: true,
+            rateMeta: shapeRateMeta(clientTz, new Date(), tzCtx),
             data
         });
     } catch (error) {
@@ -487,10 +494,13 @@ const checkRoomStayAvailability = async (req, res) => {
             return response.notFound404(res, msg.ROOM_NOT_FOUND);
         }
 
+        const tzCtx = resolveRequestTimezone(req);
+        const clientTz = tzCtx.tz;
         const bookings = await getAllRoomBlockingBookings(room._id);
         const stayEval = evaluateRoomStay(room, bookings, stay);
 
-        const money = shapeMoneyFields(room.price, room.currency);
+        const { amount: todayPrice } = resolveRoomPriceForDay(room, clientTz);
+        const money = shapeMoneyFields(todayPrice, room.currency);
         const payload = {
             ...shapeStayEvalForWebsite(stayEval),
             roomId: room._id,
@@ -500,8 +510,9 @@ const checkRoomStayAvailability = async (req, res) => {
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
             children: stay.children,
-            pricePerNight: room.price,
+            pricePerNight: todayPrice,
             totalAmount: stayEval.subTotal,
+            rateMeta: shapeRateMeta(clientTz, new Date(), tzCtx),
             ...money
         };
 
