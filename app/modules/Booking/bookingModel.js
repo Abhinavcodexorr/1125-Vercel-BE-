@@ -16,6 +16,13 @@ const cabinPackageSchema = new mongoose.Schema({
     per_night: { type: Boolean, default: false }
 }, { _id: false });
 
+const roomNightPriceSchema = new mongoose.Schema({
+    date: { type: String, required: true, trim: true },
+    day: { type: String, trim: true, default: '' },
+    dayType: { type: String, enum: ['wd', 'we'], required: true },
+    rate: { type: Number, required: true, min: 0 }
+}, { _id: false });
+
 const bookingSchema = new mongoose.Schema({
     // ... your existing fields ...
     
@@ -48,6 +55,11 @@ const bookingSchema = new mongoose.Schema({
         required: false,
         min: 0
     },
+    wdPrice: { type: Number, min: 0 },
+    wePrice: { type: Number, min: 0 },
+    wdNights: { type: Number, default: 0, min: 0 },
+    weNights: { type: Number, default: 0, min: 0 },
+    nightBreakdown: { type: [roomNightPriceSchema], default: [] },
     roomQuantity: {
         type: Number,
         default: 1,
@@ -291,6 +303,15 @@ bookingSchema.methods.getFormattedBooking = function() {
             : null,
         nights: this.nights,
         roomPricePerNight: this.roomPricePerNight,
+        wdPrice: this.wdPrice ?? null,
+        wePrice: this.wePrice ?? null,
+        wdNights: this.wdNights ?? 0,
+        weNights: this.weNights ?? 0,
+        nightBreakdown: Array.isArray(this.nightBreakdown)
+            ? this.nightBreakdown.map((night) =>
+                  night && typeof night.toObject === 'function' ? night.toObject() : { ...night }
+              )
+            : [],
         roomQuantity: this.roomQuantity || 1,
         package: Array.isArray(this.package)
             ? this.package.map((pkg) => ({

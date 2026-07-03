@@ -145,9 +145,16 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     }
 
     const nights = computeNights(item.checkInDate, item.checkOutDate);
+    const stayEval = evaluation.stayEval;
     const pricePerNight =
-        Number(evaluation.stayEval?.avgPricePerNight || item.pricePerNight || evaluation.room.price) || 0;
-    const subTotal = Number((evaluation.stayEval?.subTotal ?? pricePerNight * nights * item.quantity).toFixed(2));
+        Number(stayEval?.avgPricePerNight || item.pricePerNight || evaluation.room.price) || 0;
+    const subTotal = Number((stayEval?.subTotal ?? pricePerNight * nights * item.quantity).toFixed(2));
+    const nightBreakdown = (stayEval?.nightBreakdown || item.nightBreakdown || []).map((night) => ({
+        date: night.date,
+        day: night.day || '',
+        dayType: night.dayType,
+        rate: Number(night.rate) || 0
+    }));
 
     const booking = new Booking({
         roomId: item.roomId,
@@ -158,6 +165,11 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         children: item.children || 0,
         nights,
         roomPricePerNight: pricePerNight,
+        wdPrice: stayEval?.wdPrice ?? null,
+        wePrice: stayEval?.wePrice ?? null,
+        wdNights: stayEval?.wdNights ?? 0,
+        weNights: stayEval?.weNights ?? 0,
+        nightBreakdown,
         roomQuantity: item.quantity,
         guestDetails,
         cartId,
@@ -256,6 +268,7 @@ const createRoomBooking = async (req, res) => {
                 children: input.children,
                 quantity: evaluation.resolvedQuantity,
                 pricePerNight: evaluation.stayEval?.avgPricePerNight || evaluation.room.price,
+                nightBreakdown: evaluation.stayEval?.nightBreakdown || [],
                 currency: normalizeCurrencyCode(evaluation.room.currency)
             };
 
