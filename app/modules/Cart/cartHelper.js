@@ -107,7 +107,7 @@ const evaluateCartItemAvailability = async (roomId, input, options = {}) => {
 
 const buildCartItemFromEvaluation = (room, input, stayEval) => {
     const nights = stayEval.nights ?? computeNights(input.checkInDate, input.checkOutDate);
-    const pricePerNight = stayEval.avgPricePerNight ?? Number(room.price) || 0;
+    const pricePerNight = stayEval.avgPricePerNight ?? (Number(room.price) || 0);
     const money = shapeMoneyFields(pricePerNight, room.currency);
 
     return {
