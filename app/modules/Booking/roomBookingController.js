@@ -17,6 +17,15 @@ const {
     getHoldExpiresAt
 } = require('../Rooms/roomAvailabilityHelper');
 const msg = require('../Cart/cartMessages');
+
+const PAYMENT_LOG_PREFIX = '[Hubtel Payment]';
+const paymentLog = (message, meta = null) => {
+    if (meta) {
+        console.log(`${PAYMENT_LOG_PREFIX} ${message}`, meta);
+        return;
+    }
+    console.log(`${PAYMENT_LOG_PREFIX} ${message}`);
+};
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 const { normalizeCurrencyCode } = require('../../helper/currencyHelper');
 const sendEmail = require('../../middleware/mail');
@@ -296,6 +305,15 @@ const createRoomBooking = async (req, res) => {
             ? `${baseCancelUrl}?cartId=${encodeURIComponent(cancelCartId)}`
             : baseCancelUrl;
 
+        paymentLog('Starting payment for booking', {
+            bookingReference: sharedReference,
+            bookingCount: bookings.length,
+            totalAmount: Number(totalAmount.toFixed(2)),
+            currency: bookings[0].currency,
+            cartId: cancelCartId || null,
+            guestEmail: guest.email || null
+        });
+
         let hubtel;
         try {
             hubtel = await hubtelService.initiateCheckout({
@@ -306,9 +324,19 @@ const createRoomBooking = async (req, res) => {
                 cancellationUrl
             });
         } catch (paymentError) {
+            paymentLog('Payment initiation failed — rolling back pending bookings', {
+                bookingReference: sharedReference,
+                error: paymentError.message
+            });
             await Booking.deleteMany({ _id: { $in: bookings.map((b) => b._id) } });
             throw paymentError;
         }
+
+        paymentLog('Payment checkout ready — redirect guest to Hubtel', {
+            bookingReference: sharedReference,
+            checkoutId: hubtel.checkoutId || null,
+            checkoutUrl: hubtel.checkoutUrl
+        });
 
         await Booking.updateMany(
             { _id: { $in: bookings.map((b) => b._id) } },
@@ -356,7 +384,14 @@ const handleHubtelCallback = async (req, res) => {
     try {
         const body = req.body || {};
         const clientReference = body.ClientReference || body.clientReference;
+        paymentLog('Hubtel callback received', {
+            clientReference: clientReference || null,
+            status: body.Status || body.status || null,
+            transactionId: body.TransactionId || body.transactionId || null
+        });
+
         if (!clientReference) {
+            paymentLog('Hubtel callback rejected — missing ClientReference');
             return response.error400(res, 'ClientReference is required');
         }
 
@@ -366,14 +401,18 @@ const handleHubtelCallback = async (req, res) => {
         });
 
         if (!bookings.length) {
+            paymentLog('Hubtel callback — booking not found', { clientReference });
             return response.notFound404(res, 'Booking not found');
         }
 
         let verified = hubtelService.isPaidCallback(body);
+        let verifySource = verified ? 'callback-body' : null;
         if (!verified) {
             try {
+                paymentLog('Callback not marked paid — verifying with Hubtel API', { clientReference });
                 const statusCheck = await hubtelService.verifyTransaction(clientReference, bookings[0]);
                 verified = statusCheck.isPaid;
+                verifySource = 'hubtel-api';
             } catch (verifyError) {
                 console.error('Hubtel callback status verify failed:', verifyError.message);
             }
@@ -394,9 +433,23 @@ const handleHubtelCallback = async (req, res) => {
             update.paymentStatus = 'failed';
         }
 
+        paymentLog('Updating booking from callback', {
+            clientReference,
+            verified,
+            verifySource,
+            wasPaid,
+            newPaymentStatus: update.paymentStatus,
+            newBookingStatus: update.status || bookings[0].status,
+            transactionId: update.transactionId || null
+        });
+
         await Booking.updateMany({ bookingReference: clientReference, isDeleted: false }, update);
 
         if (verified && !wasPaid) {
+            paymentLog('Payment confirmed via callback — clearing cart and sending email', {
+                clientReference,
+                bookingCount: bookings.length
+            });
             const refreshed = await Booking.find({ bookingReference: clientReference, isDeleted: false });
             await clearCartAfterSuccessfulPayment(refreshed);
             await notifyBookingPaidEmails(refreshed);
@@ -412,19 +465,27 @@ const handleHubtelCallback = async (req, res) => {
 const confirmHubtelBooking = async (req, res) => {
     try {
         const reference = req.query.reference || req.query.clientReference || req.params.reference;
+        paymentLog('Confirm payment requested', { reference: reference || null });
+
         if (!reference) {
+            paymentLog('Confirm payment rejected — missing reference');
             return response.error400(res, 'reference is required');
         }
 
         const bookings = await Booking.find({ bookingReference: reference, isDeleted: false });
 
         if (!bookings.length) {
+            paymentLog('Confirm payment — booking not found', { reference });
             return response.notFound404(res, 'Booking not found');
         }
 
         const booking = bookings[0];
 
         if (booking.paymentStatus === 'paid') {
+            paymentLog('Confirm payment — already paid in database', {
+                reference,
+                transactionId: booking.transactionId || null
+            });
             await clearCartAfterSuccessfulPayment(bookings);
             return response.success200(res, 'Booking payment status checked', {
                 isPaid: true,
@@ -435,14 +496,32 @@ const confirmHubtelBooking = async (req, res) => {
             });
         }
 
+        paymentLog('Confirm payment — checking Hubtel status API', {
+            reference,
+            currentPaymentStatus: booking.paymentStatus,
+            transactionId: booking.transactionId || null
+        });
+
         const statusCheck = await hubtelService.verifyTransaction(reference, booking);
         const update = hubtelService.buildBookingUpdateFromHubtelStatus(statusCheck);
+
+        paymentLog('Confirm payment — applying status update', {
+            reference,
+            hubtelStatus: statusCheck.status,
+            isPaid: statusCheck.isPaid,
+            newPaymentStatus: update.paymentStatus,
+            newBookingStatus: update.status || booking.status
+        });
 
         await Booking.updateMany({ bookingReference: reference, isDeleted: false }, update);
 
         const refreshed = await Booking.find({ bookingReference: reference, isDeleted: false });
 
         if (statusCheck.isPaid) {
+            paymentLog('Payment confirmed via confirm endpoint — clearing cart and sending email', {
+                reference,
+                bookingCount: refreshed.length
+            });
             await clearCartAfterSuccessfulPayment(refreshed);
             await notifyBookingPaidEmails(refreshed);
         }

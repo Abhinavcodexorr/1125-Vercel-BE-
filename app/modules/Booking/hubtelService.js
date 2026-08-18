@@ -1,6 +1,24 @@
 const axios = require('axios');
 const { getHubtelSettings, getHubtelConfigErrors } = require('../../config/hubtel.config');
 
+const PAYMENT_LOG_PREFIX = '[Hubtel Payment]';
+
+const paymentLog = (message, meta = null) => {
+    if (meta) {
+        console.log(`${PAYMENT_LOG_PREFIX} ${message}`, meta);
+        return;
+    }
+    console.log(`${PAYMENT_LOG_PREFIX} ${message}`);
+};
+
+const paymentError = (message, meta = null) => {
+    if (meta) {
+        console.error(`${PAYMENT_LOG_PREFIX} ${message}`, meta);
+        return;
+    }
+    console.error(`${PAYMENT_LOG_PREFIX} ${message}`);
+};
+
 const getHubtelConfig = () => getHubtelSettings();
 
 const getAuthHeader = () => {
@@ -191,6 +209,16 @@ const initiateCheckout = async ({
         payload.customerPhoneNumber = String(customerPhoneNumber).replace(/\s+/g, '');
     }
 
+    paymentLog('Initiating checkout', {
+        clientReference,
+        totalAmount: payload.totalAmount,
+        merchantAccountNumber: config.merchantAccountNumber,
+        callbackUrl: config.callbackUrl,
+        returnUrl: config.returnUrl,
+        cancellationUrl: payload.cancellationUrl,
+        hasPhone: Boolean(payload.customerPhoneNumber)
+    });
+
     try {
         const response = await axios.post(config.initiateUrl, payload, {
             headers: {
@@ -221,12 +249,25 @@ const initiateCheckout = async ({
             null;
 
         if (!checkoutUrl) {
+            paymentError('Checkout initiation failed — no checkout URL in response', {
+                clientReference,
+                responseCode,
+                hubtelStatus
+            });
             throw new Error('Hubtel did not return a checkout URL');
         }
 
+        const checkoutId = data?.checkoutId || data?.CheckoutId || null;
+        paymentLog('Checkout initiated successfully', {
+            clientReference,
+            checkoutId,
+            responseCode: responseCode || 'n/a',
+            hubtelStatus: hubtelStatus || 'n/a'
+        });
+
         return {
             checkoutUrl,
-            checkoutId: data?.checkoutId || data?.CheckoutId || null,
+            checkoutId,
             raw: response.data
         };
     } catch (error) {
@@ -238,13 +279,27 @@ const initiateCheckout = async ({
                 body.status ||
                 body.error ||
                 JSON.stringify(body);
+            paymentError('Checkout initiation API error', {
+                clientReference,
+                status: error.response.status,
+                message
+            });
             throw new Error(`Hubtel payment error: ${message}`);
         }
         if (error.code === 'ENOTFOUND' || error.code === 'ERR_INVALID_URL') {
+            paymentError('Checkout initiation failed — invalid API URL', {
+                clientReference,
+                initiateUrl: config.initiateUrl,
+                code: error.code
+            });
             throw new Error(
                 `Hubtel payment error: invalid API URL (${config.initiateUrl}). Check HUBTEL_INITIATE_URL in .env`
             );
         }
+        paymentError('Checkout initiation failed', {
+            clientReference,
+            message: error.message
+        });
         throw error;
     }
 };
@@ -257,10 +312,17 @@ const verifyTransaction = async (clientReference, booking = null) => {
         Accept: 'application/json'
     };
 
+    paymentLog('Verifying transaction status', {
+        clientReference,
+        checkoutId: booking?.transactionId || null,
+        urlCount: urls.length
+    });
+
     let lastError = null;
 
     for (const url of urls) {
         try {
+            paymentLog('Status check request', { clientReference, url });
             const response = await axios.get(url, {
                 headers,
                 timeout: 30000,
@@ -268,6 +330,11 @@ const verifyTransaction = async (clientReference, booking = null) => {
             });
 
             if (response.status === 401 || response.status === 403) {
+                paymentError('Status check denied', {
+                    clientReference,
+                    httpStatus: response.status,
+                    url
+                });
                 lastError = new Error(
                     `Hubtel status API denied (${response.status}). Transaction status may not be enabled for your API keys — contact Hubtel support. URL: ${url}`
                 );
@@ -275,25 +342,55 @@ const verifyTransaction = async (clientReference, booking = null) => {
             }
 
             if (response.status >= 400) {
+                paymentError('Status check HTTP error', {
+                    clientReference,
+                    httpStatus: response.status,
+                    url
+                });
                 lastError = new Error(`Hubtel status API returned HTTP ${response.status}`);
                 continue;
             }
 
-            return parseStatusApiResponse(response.data);
+            const result = parseStatusApiResponse(response.data);
+            paymentLog('Status check succeeded', {
+                clientReference,
+                url,
+                status: result.status,
+                isPaid: result.isPaid,
+                isFailed: result.isFailed
+            });
+            return result;
         } catch (error) {
+            paymentError('Status check request failed', {
+                clientReference,
+                url,
+                message: error.message
+            });
             lastError = error;
         }
     }
 
     if (lastError) {
+        paymentError('All status check attempts failed', {
+            clientReference,
+            message: lastError.message
+        });
         throw lastError;
     }
 
+    paymentError('Status check failed with no response', { clientReference });
     throw new Error('Hubtel status check failed');
 };
 
 const isPaidCallback = (body = {}) => {
-    return isPaidStatus(body.Status || body.status);
+    const status = body.Status || body.status;
+    const paid = isPaidStatus(status);
+    paymentLog('Callback status parsed', {
+        clientReference: body.ClientReference || body.clientReference || null,
+        status: status || 'missing',
+        isPaid: paid
+    });
+    return paid;
 };
 
 module.exports = {
