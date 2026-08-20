@@ -137,7 +137,26 @@ const buildCancellationEmailHtml = ({ guestName, detailRows = [], refundMessage 
         }
         .detail-value.highlight {
             font-weight: 700;
-            color: ${BRAND_COLOR};
+            color: #333333;
+        }
+        .policies-box {
+            background-color: #fafbfc;
+            border: 1px solid #d9e2ea;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .policy-item {
+            margin-bottom: 16px;
+        }
+        .policy-item:last-child {
+            margin-bottom: 0;
+        }
+        .policy-text {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #555555;
         }
         .note-box {
             border: 1px solid #d9e2ea;
@@ -182,8 +201,8 @@ const buildCancellationEmailHtml = ({ guestName, detailRows = [], refundMessage 
             .header { padding: 20px 16px !important; }
             .header-title { font-size: 20px !important; }
             .content { padding: 20px 16px !important; }
-            .details-box, .note-box { padding: 14px !important; }
-            .detail-value, .intro-text, .note-content { font-size: 14px !important; }
+            .details-box, .note-box, .policies-box { padding: 14px !important; }
+            .detail-value, .intro-text, .note-content, .policy-text { font-size: 13px !important; }
         }
     </style>
 </head>
@@ -209,6 +228,19 @@ const buildCancellationEmailHtml = ({ guestName, detailRows = [], refundMessage 
                                     ${renderDetailRows(detailRows)}
                                 </div>
                                 ${refundBlock}
+
+                                <p class="section-title">Cancellation Policy</p>
+                                <div class="policies-box">
+                                    <div class="policy-item">
+                                        <p class="policy-text">
+                                            &bull; Cancellations made 7 days or more before the scheduled arrival date are eligible for a 100% refund.<br>
+                                            &bull; Cancellations made within 1-6 days of the arrival date are eligible for a 50% refund.<br>
+                                            &bull; Same-day cancellations or no-shows are non-refundable.<br>
+                                            &bull; Changes to reservation dates are subject to availability and management approval.
+                                        </p>
+                                    </div>
+                                </div>
+
                                 <div class="note-box">
                                     <p class="note-content">
                                         If you have any questions about this cancellation, please contact us at

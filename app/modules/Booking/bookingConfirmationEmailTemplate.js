@@ -161,7 +161,34 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
         }
         .detail-value.highlight {
             font-weight: 700;
+            color: #333333;
+        }
+        .policies-box {
+            background-color: #fafbfc;
+            border: 1px solid #d9e2ea;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .policy-item {
+            margin-bottom: 16px;
+        }
+        .policy-item:last-child {
+            margin-bottom: 0;
+        }
+        .policy-title {
+            font-size: 13px;
+            font-weight: 700;
             color: ${BRAND_COLOR};
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .policy-text {
+            margin: 0;
+            font-size: 13px;
+            line-height: 1.5;
+            color: #555555;
         }
         .note-box {
             border: 1px solid #d9e2ea;
@@ -202,8 +229,8 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
             .header { padding: 20px 16px !important; }
             .header-title { font-size: 20px !important; }
             .content { padding: 20px 16px !important; }
-            .details-box, .note-box { padding: 14px !important; }
-            .detail-value, .intro-text, .note-content { font-size: 14px !important; }
+            .details-box, .note-box, .policies-box { padding: 14px !important; }
+            .detail-value, .intro-text, .note-content, .policy-text { font-size: 13px !important; }
         }
     </style>
 </head>
@@ -239,6 +266,35 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
                                     <span class="detail-label">Amount Paid</span>
                                     <span class="detail-value highlight">${escapeHtml(amountPaid)}</span>
                                 </div>
+                                
+                                <p class="section-title">Villa Policies</p>
+                                <div class="policies-box">
+                                    <div class="policy-item">
+                                        <div class="policy-title">1. Check-In & Check-Out</div>
+                                        <p class="policy-text">Check-in: 2:00 PM | Check-out: 11:00 AM.<br>Early check-in or late check-out may be available upon request and subject to a small additional fee.<br>Please present a valid photo ID at check-in.</p>
+                                    </div>
+                                    <div class="policy-item">
+                                        <div class="policy-title">2. Bookings & Payments</div>
+                                        <p class="policy-text">Reservations are confirmed once full payment is received.<br>We accept mobile money, debit/credit cards, bank transfers, and approved online payment platforms.<br>All prices include applicable taxes and service charges unless stated otherwise.</p>
+                                    </div>
+                                    <div class="policy-item">
+                                        <div class="policy-title">3. Cancellations & Refunds</div>
+                                        <p class="policy-text">Cancel 7 days or more before your stay for a full refund.<br>Cancel 1–6 days before arrival for a 50% refund.<br>Same-day cancellations or no-shows are non-refundable.<br>Refunds are processed within 14 business days.</p>
+                                    </div>
+                                    <div class="policy-item">
+                                        <div class="policy-title">4. Outside Food & Beverages</div>
+                                        <p class="policy-text">Guests are not permitted to bring external food or beverages onto the resort premises unless prior written authorisation has been obtained from management.</p>
+                                    </div>
+                                    <div class="policy-item">
+                                        <div class="policy-title">5. Smoking Policy</div>
+                                        <p class="policy-text">Smoking is not permitted within any of the chalets. Any breach of this policy may result in additional charges or penalties.</p>
+                                    </div>
+                                    <div class="policy-item">
+                                        <div class="policy-title">6. Pets</div>
+                                        <p class="policy-text">Pets are not allowed without prior notice and approval.</p>
+                                    </div>
+                                </div>
+
                                 <div class="note-box">
                                     <p class="note-content">
                                         If you have any questions about your stay, please contact us at

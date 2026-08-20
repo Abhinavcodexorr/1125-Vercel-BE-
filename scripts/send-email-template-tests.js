@@ -19,7 +19,7 @@ const {
     buildCancellationEmailHtml
 } = require('../app/modules/Booking/bookingCancellationEmailTemplate');
 
-const TEST_RECIPIENT = 'info@1125beachvilla.com';
+const TEST_RECIPIENT = 'ritesh@codexorr.com';
 
 const sampleBooking = {
     bookingReference: 'BK-TEST-00482',

@@ -168,7 +168,7 @@ const buildBookingInProgressEmailHtml = ({ booking, roomName, submittedAt }) => 
         }
         .detail-value.highlight {
             font-weight: 700;
-            color: ${BRAND_COLOR};
+            color: #333333;
         }
         .footer {
             background-color: #fafbfc;
