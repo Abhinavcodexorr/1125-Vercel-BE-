@@ -13,14 +13,15 @@ const shapeStaff = (doc) => formatStaffDocument(doc);
 // Update password (SuperAdmin, SubAdmin, Manager – each can update own password)
 const updatePassword = async (req, res) => {
     try {
-        const { currentPassword, newPassword } = req.body;
+        const currentPassword = req.body.currentPassword || req.body.oldPassword;
+        const { newPassword } = req.body;
 
         if (!currentPassword || !newPassword) {
             return response.error400(res, "Current password and new password are required");
         }
 
-        if (String(newPassword).length < 8) {
-            return response.error400(res, "New password must be at least 8 characters long");
+        if (String(newPassword).length < 6) {
+            return response.error400(res, "New password must be at least 6 characters long");
         }
 
         const user = await SuperAdmin.findById(req.userId);
@@ -455,8 +456,8 @@ const updateSubAdmin = async (req, res) => {
             updates.email = trimmedEmail;
         }
         if (password !== undefined && password !== null && String(password).trim() !== '') {
-            if (String(password).length < 8) {
-                return response.error400(res, "Password must be at least 8 characters long");
+            if (String(password).length < 6) {
+                return response.error400(res, "Password must be at least 6 characters long");
             }
             updates.password = password.trim();
             updates.activeToken = null;

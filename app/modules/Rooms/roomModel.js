@@ -32,6 +32,7 @@ const roomSchema = new mongoose.Schema({
     quantity: { type: Number, required: true, min: 1, default: 1 },
     size: { type: Number, required: true, min: 0 },
     unit: { type: String, trim: true, default: 'sq ft' },
+    bedConfiguration: { type: String, trim: true, default: '' },
     amenities: { type: [amenitySchema], default: [] },
     images: { type: [roomImageSchema], default: [] },
     blockedDates: { type: [blockedDateSchema], default: [] },
@@ -65,6 +66,7 @@ const baseShape = (doc) => {
     quantity: doc.quantity != null ? doc.quantity : 1,
     size: doc.size,
     unit: doc.unit || 'sq ft',
+    bedConfiguration: doc.bedConfiguration || '',
     amenities: doc.amenities || [],
     images: sortImages(doc.images),
     blockedDates: Array.isArray(doc.blockedDates)

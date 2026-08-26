@@ -270,6 +270,7 @@ const shapeRoomBaseForWebsite = (room, timezone) => {
         description: room.description || '',
         size: room.size,
         unit: room.unit || 'sq ft',
+        bedConfiguration: room.bedConfiguration || '',
         wdPrice,
         wePrice,
         dayType,

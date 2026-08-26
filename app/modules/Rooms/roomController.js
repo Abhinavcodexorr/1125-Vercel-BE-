@@ -77,7 +77,7 @@ const resolveWeekendPriceInput = (body) =>
 
 const createRoom = async (req, res) => {
     try {
-        const { title, slug, type, description, price, currency, guests, quantity, size, unit, amenities, images, isActive } = req.body;
+        const { title, slug, type, description, price, currency, guests, quantity, size, unit, bedConfiguration, amenities, images, isActive } = req.body;
 
         if (!title || !String(title).trim()) {
             return response.error400(res, msg.TITLE_REQUIRED);
@@ -155,6 +155,7 @@ const createRoom = async (req, res) => {
             quantity: quantityNum,
             size: sizeNum,
             unit: unit != null && String(unit).trim() ? String(unit).trim() : 'sq ft',
+            bedConfiguration: bedConfiguration != null ? String(bedConfiguration).trim() : '',
             amenities: roomAmenities,
             images: roomImages,
             isActive: isActive !== undefined ? !!isActive : true,
@@ -213,7 +214,7 @@ const updateRoom = async (req, res) => {
             return response.notFound404(res, msg.ROOM_NOT_FOUND);
         }
 
-        const { title, slug, type, description, price, currency, guests, quantity, size, unit, amenities, images, isActive } = req.body;
+        const { title, slug, type, description, price, currency, guests, quantity, size, unit, bedConfiguration, amenities, images, isActive } = req.body;
         const updateData = {};
 
         if (title !== undefined) {
@@ -275,6 +276,9 @@ const updateRoom = async (req, res) => {
         }
         if (unit !== undefined) {
             updateData.unit = unit != null && String(unit).trim() ? String(unit).trim() : 'sq ft';
+        }
+        if (bedConfiguration !== undefined) {
+            updateData.bedConfiguration = String(bedConfiguration).trim();
         }
         if (amenities !== undefined) {
             updateData.amenities = Array.isArray(amenities)
