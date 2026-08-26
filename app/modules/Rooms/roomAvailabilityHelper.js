@@ -1,4 +1,5 @@
 const Booking = require('../Booking/bookingModel');
+const Room = require('./roomModel');
 const { ROOM_COMBO_CONFLICTS } = require('../../config/roomConflict.config');
 
 /** Paid, confirmed stays always block availability. */
@@ -55,6 +56,33 @@ const collectBookingsForRoomAvailability = (roomId, bookingsByRoom = {}) => {
         }
     });
     return collected;
+};
+
+/** Admin blocked-date ranges from conflict-partner rooms (Suite ↔ Standard/Deluxe). */
+const getConflictPartnerBlockedDateDocs = async (roomId) => {
+    const selfId = normalizeRoomId(roomId);
+    const partnerIds = getAvailabilityBlockingRoomIds(roomId).filter((id) => id && id !== selfId);
+    if (!partnerIds.length) return [];
+
+    const partners = await Room.find({
+        _id: { $in: partnerIds },
+        isDeleted: false
+    })
+        .select('blockedDates')
+        .lean();
+
+    return partners.flatMap((partner) => partner.blockedDates || []);
+};
+
+/** Room copy with own + partner admin blocks (for stay / calendar availability). */
+const withEffectiveBlockedDates = async (room) => {
+    if (!room?._id) return room;
+    const partnerBlocked = await getConflictPartnerBlockedDateDocs(room._id);
+    if (!partnerBlocked.length) return room;
+    return {
+        ...room,
+        blockedDates: [...(room.blockedDates || []), ...partnerBlocked]
+    };
 };
 
 const getBookingHoldMinutes = () => {
@@ -253,10 +281,13 @@ const getRoomBlockedDateData = (blockedDates = []) => {
         const occupiedDates = getOccupiedDateKeysForRange(block.startDate, block.endDate);
         occupiedDates.forEach((dateKey) => blockedDateSet.add(dateKey));
 
+        const start = toDateOnly(block.startDate);
+        const end = toDateOnly(block.endDate);
+
         return {
             _id: block._id,
-            startDate: block.startDate,
-            endDate: block.endDate,
+            startDate: start ? formatDateKey(start) : block.startDate,
+            endDate: end ? formatDateKey(end) : block.endDate,
             reason: block.reason || '',
             occupiedDates,
             createdAt: block.createdAt,
@@ -291,7 +322,7 @@ const getAvailableWindowEnd = (bookings, blockedDates, today) => {
     return windowEnd;
 };
 
-const buildFullRoomAvailability = (room, bookings) => {
+const buildFullRoomAvailability = (room, bookings, options = {}) => {
     const quantity = getRoomQuantity(room);
     const bookingCountByDate = buildBookingCountByDate(bookings);
 
@@ -309,7 +340,12 @@ const buildFullRoomAvailability = (room, bookings) => {
     });
 
     const bookingBookedDates = [...bookingCountByDate.keys()].sort();
-    const { blocked, blockedDates: adminBlockedDates } = getRoomBlockedDateData(room.blockedDates || []);
+
+    // Own blocks = what admin can edit; effective = own + conflict-partner blocks
+    const ownBlockedDocs = options.ownBlockedDates ?? room.blockedDates ?? [];
+    const effectiveBlockedDocs = options.effectiveBlockedDates ?? room.blockedDates ?? [];
+    const ownBlockedData = getRoomBlockedDateData(ownBlockedDocs);
+    const { blockedDates: adminBlockedDates } = getRoomBlockedDateData(effectiveBlockedDocs);
     const blockedDateSet = new Set(adminBlockedDates);
 
     const fullyBookedDates = [];
@@ -353,7 +389,7 @@ const buildFullRoomAvailability = (room, bookings) => {
     const bookedDates = [...unavailableDateSet].sort();
 
     const today = toDateOnly(new Date());
-    const windowEnd = getAvailableWindowEnd(bookings, room.blockedDates, today);
+    const windowEnd = getAvailableWindowEnd(bookings, effectiveBlockedDocs, today);
     const futureDateKeys = today <= windowEnd ? enumerateDateKeys(today, windowEnd) : [];
     const availableDates = futureDateKeys.filter((dateKey) => {
         if (blockedDateSet.has(dateKey)) return false;
@@ -383,9 +419,10 @@ const buildFullRoomAvailability = (room, bookings) => {
             quantity
         },
         booked,
-        blocked,
+        blocked: ownBlockedData.blocked,
         bookingBookedDates,
-        blockedDates: adminBlockedDates,
+        // Own admin blocks only (what the admin panel edits)
+        blockedDates: ownBlockedData.blockedDates,
         bookedDates,
         partiallyBookedDates,
         availableDates,
@@ -394,9 +431,9 @@ const buildFullRoomAvailability = (room, bookings) => {
         availableUntil: formatDateKey(windowEnd),
         summary: {
             totalBookings: booked.length,
-            totalBlockedRanges: blocked.length,
+            totalBlockedRanges: ownBlockedData.blocked.length,
             totalBookingDays: bookingBookedDates.length,
-            totalBlockedDays: adminBlockedDates.length,
+            totalBlockedDays: ownBlockedData.blockedDates.length,
             totalUnavailableDays: bookedDates.length,
             totalPartiallyBookedDays: partiallyBookedDates.length,
             totalAvailableDays: availableDates.length,
@@ -560,6 +597,8 @@ module.exports = {
     getAvailabilityBlockingRoomIds,
     expandRoomIdsWithConflicts,
     collectBookingsForRoomAvailability,
+    getConflictPartnerBlockedDateDocs,
+    withEffectiveBlockedDates,
     roomBlockingBookingQuery,
     buildFullRoomAvailability,
     getOccupiedDateKeysForBooking,

@@ -7,6 +7,8 @@ const {
     getAllRoomBlockingBookings,
     getRoomBlockingBookingsByRoomIds,
     collectBookingsForRoomAvailability,
+    getConflictPartnerBlockedDateDocs,
+    withEffectiveBlockedDates,
     buildFullRoomAvailability,
     getRoomBlockedDateData,
     validateRoomQuantityUpdate,
@@ -410,11 +412,16 @@ const getRoomsForWebsite = async (req, res) => {
             bookingsByRoom[key].push(booking);
         });
 
-        let shaped = rooms.map((room) => {
-            const bookings = collectBookingsForRoomAvailability(room._id, bookingsByRoom);
-            const stayEval = evaluateRoomStay(room, bookings, stay);
-            return { rawRoom: room, stayEval, createdAt: room.createdAt };
-        });
+        let shaped = await Promise.all(
+            rooms.map(async (room) => {
+                const [bookings, roomForStay] = await Promise.all([
+                    Promise.resolve(collectBookingsForRoomAvailability(room._id, bookingsByRoom)),
+                    withEffectiveBlockedDates(room)
+                ]);
+                const stayEval = evaluateRoomStay(roomForStay, bookings, stay);
+                return { rawRoom: room, stayEval, createdAt: room.createdAt };
+            })
+        );
 
         if (stay.hasStayDates && stay.validStayDates) {
             shaped = shaped.filter(({ stayEval }) => stayEval.isAvailable);
@@ -464,8 +471,11 @@ const getRoomByIdForWebsite = async (req, res) => {
 
         let data = shapeRoomBaseForWebsite(room, clientTz);
         if (stay.hasStayDates && stay.validStayDates) {
-            const bookings = await getAllRoomBlockingBookings(room._id);
-            const stayEval = evaluateRoomStay(room, bookings, stay);
+            const [bookings, roomForStay] = await Promise.all([
+                getAllRoomBlockingBookings(room._id),
+                withEffectiveBlockedDates(room)
+            ]);
+            const stayEval = evaluateRoomStay(roomForStay, bookings, stay);
             data = attachStayAvailabilityToRoom(room, stay, stayEval, clientTz);
         }
 
@@ -502,7 +512,8 @@ const checkRoomStayAvailability = async (req, res) => {
         const tzCtx = resolveRequestTimezone(req);
         const clientTz = tzCtx.tz;
         const bookings = await getAllRoomBlockingBookings(room._id);
-        const stayEval = evaluateRoomStay(room, bookings, stay);
+        const roomForStay = await withEffectiveBlockedDates(room);
+        const stayEval = evaluateRoomStay(roomForStay, bookings, stay);
 
         const { amount: todayPrice } = resolveRoomPriceForDay(room, clientTz);
         const money = shapeMoneyFields(
@@ -542,7 +553,7 @@ const checkRoomStayAvailability = async (req, res) => {
 
 const loadRoomForAvailability = async (req, res) => {
     const room = await Room.findOne(buildRoomLookup(req.params.id, { isActive: true }))
-        .select('title slug type blockedDates')
+        .select('title slug type quantity blockedDates')
         .lean();
     if (!room) {
         response.notFound404(res, msg.ROOM_NOT_FOUND);
@@ -551,16 +562,41 @@ const loadRoomForAvailability = async (req, res) => {
     return room;
 };
 
+/**
+ * Full calendar availability for admin (and website).
+ * Includes per-date quantity occupancy so multi-unit rooms show partial vs full.
+ * Admin can block/unblock dates via POST/DELETE .../blocked-dates (own blocks only).
+ * Conflict-partner admin blocks still mark dates unavailable on the calendar.
+ * GET /rooms/:id/availability
+ */
 const getRoomAvailability = async (req, res) => {
     try {
         const room = await loadRoomForAvailability(req, res);
         if (!room) return;
 
-        const bookings = await getAllRoomBlockingBookings(room._id);
-        const availability = buildFullRoomAvailability(room, bookings);
+        const [bookings, partnerBlocked] = await Promise.all([
+            getAllRoomBlockingBookings(room._id),
+            getConflictPartnerBlockedDateDocs(room._id)
+        ]);
+        const ownBlockedDates = room.blockedDates || [];
+        const availability = buildFullRoomAvailability(room, bookings, {
+            ownBlockedDates,
+            effectiveBlockedDates: [...ownBlockedDates, ...partnerBlocked]
+        });
 
         return response.success200(res, msg.ROOM_AVAILABILITY_RETRIEVED, {
-            bookedDates: availability.bookedDates
+            room: availability.room,
+            booked: availability.booked,
+            blocked: availability.blocked,
+            bookingBookedDates: availability.bookingBookedDates,
+            blockedDates: availability.blockedDates,
+            bookedDates: availability.bookedDates,
+            partiallyBookedDates: availability.partiallyBookedDates,
+            availableDates: availability.availableDates,
+            occupancyByDate: availability.occupancyByDate,
+            availableFrom: availability.availableFrom,
+            availableUntil: availability.availableUntil,
+            summary: availability.summary
         });
     } catch (error) {
         console.error('Get room availability error:', error.message);

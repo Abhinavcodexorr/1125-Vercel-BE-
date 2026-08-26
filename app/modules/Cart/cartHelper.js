@@ -4,7 +4,8 @@ const {
     getAllRoomBlockingBookings,
     resolveBookingQuantity,
     computeNights,
-    toDateOnly
+    toDateOnly,
+    withEffectiveBlockedDates
 } = require('../Rooms/roomAvailabilityHelper');
 const { evaluateRoomStay } = require('../Rooms/roomWebsiteHelper');
 const { normalizeCurrencyCode, shapeMoneyFields } = require('../../helper/currencyHelper');
@@ -94,7 +95,8 @@ const evaluateCartItemAvailability = async (roomId, input, options = {}) => {
     const bookings = await getAllRoomBlockingBookings(room._id, {
         excludeCartId: options.excludeCartId || null
     });
-    const stayEval = evaluateRoomStay(room, bookings, stay, options);
+    const roomForStay = await withEffectiveBlockedDates(room);
+    const stayEval = evaluateRoomStay(roomForStay, bookings, stay, options);
 
     return {
         ok: stayEval.isAvailable,

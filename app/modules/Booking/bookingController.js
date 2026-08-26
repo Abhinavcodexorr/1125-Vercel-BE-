@@ -10,7 +10,7 @@ const {
     evaluateRoomStay,
     getAllRoomBlockingBookings
 } = require('../Rooms/roomWebsiteHelper');
-const { formatDateKey } = require('../Rooms/roomAvailabilityHelper');
+const { formatDateKey, withEffectiveBlockedDates } = require('../Rooms/roomAvailabilityHelper');
 const response = require('../../helper/response');
 const { getCurrencyDisplayPrefix, normalizeCurrencyCode } = require('../../helper/currencyHelper');
 const sendEmail = require('../../middleware/mail');
@@ -1478,8 +1478,11 @@ const buildCalendarRoomsAvailability = async (stay) => {
 
     const shapedRooms = await Promise.all(
         rooms.map(async (room) => {
-            const bookings = await getAllRoomBlockingBookings(room._id);
-            const stayEval = evaluateRoomStay(room, bookings, stay);
+            const [bookings, roomForStay] = await Promise.all([
+                getAllRoomBlockingBookings(room._id),
+                withEffectiveBlockedDates(room)
+            ]);
+            const stayEval = evaluateRoomStay(roomForStay, bookings, stay);
             return { room: shapeRoomBaseForWebsite(room), stayEval };
         })
     );

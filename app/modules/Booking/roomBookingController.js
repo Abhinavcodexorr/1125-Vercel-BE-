@@ -14,7 +14,8 @@ const {
     formatRoomNotAvailableForDates,
     getAllRoomBlockingBookings,
     computeNights,
-    getHoldExpiresAt
+    getHoldExpiresAt,
+    withEffectiveBlockedDates
 } = require('../Rooms/roomAvailabilityHelper');
 const msg = require('../Cart/cartMessages');
 
@@ -223,7 +224,8 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         excludeBookingIds: [booking._id],
         excludeCartId: cartId || null
     });
-    const postSaveEval = evaluateRoomStay(evaluation.room, blockingBookings, stay);
+    const roomForStay = await withEffectiveBlockedDates(evaluation.room);
+    const postSaveEval = evaluateRoomStay(roomForStay, blockingBookings, stay);
     if (!postSaveEval.isAvailable) {
         await Booking.deleteOne({ _id: booking._id });
         throw new Error(postSaveEval.unavailableReason || formatRoomNotAvailableForDates(evaluation.room));
