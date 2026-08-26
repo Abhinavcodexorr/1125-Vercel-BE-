@@ -133,12 +133,15 @@ const buildGuestDetails = (guestDetails = {}) => ({
 
 const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     const cartOptions = cartId ? { excludeCartId: cartId } : {};
+    const qty = parseInt(item.quantity, 10);
+    const resolvedQty = Number.isFinite(qty) && qty >= 1 ? qty : 1;
     const input = {
         checkInDate: item.checkInDate,
         checkOutDate: item.checkOutDate,
         adults: item.adults,
         children: item.children,
-        quantity: item.quantity
+        quantity: resolvedQty,
+        quantityProvided: true
     };
 
     const evaluation = await evaluateCartItemAvailability(item.roomId, input, cartOptions);
@@ -155,9 +158,12 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
 
     const nights = computeNights(item.checkInDate, item.checkOutDate);
     const stayEval = evaluation.stayEval;
+    const bookedQuantity = evaluation.resolvedQuantity || resolvedQty;
     const pricePerNight =
         Number(stayEval?.avgPricePerNight || item.pricePerNight || evaluation.room.price) || 0;
-    const subTotal = Number((stayEval?.subTotal ?? pricePerNight * nights * item.quantity).toFixed(2));
+    const subTotal = Number(
+        (stayEval?.subTotal ?? pricePerNight * nights * bookedQuantity).toFixed(2)
+    );
     const nightBreakdown = (stayEval?.nightBreakdown || item.nightBreakdown || []).map((night) => ({
         date: night.date,
         day: night.day || '',
@@ -179,7 +185,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         wdNights: stayEval?.wdNights ?? 0,
         weNights: stayEval?.weNights ?? 0,
         nightBreakdown,
-        roomQuantity: item.quantity,
+        roomQuantity: bookedQuantity,
         guestDetails,
         cartId,
         subTotal,
@@ -198,7 +204,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         checkOutDate: item.checkOutDate,
         adults: item.adults,
         children: item.children,
-        requestedQuantity: item.quantity,
+        requestedQuantity: bookedQuantity,
         hasStayDates: true,
         validStayDates: item.checkOutDate > item.checkInDate
     };

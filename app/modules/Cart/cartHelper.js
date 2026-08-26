@@ -147,6 +147,17 @@ const recalculateCartTotals = (cart) => {
     return cart;
 };
 
+const cartItemQuantityInput = (item) => {
+    const qty = parseInt(item?.quantity, 10);
+    const hasQty = Number.isFinite(qty) && qty >= 1;
+    return {
+        quantity: hasQty ? qty : 1,
+        // Always treat stored cart quantity as provided so multi-unit rooms
+        // are not reset to 1 on get-cart / checkout refresh.
+        quantityProvided: hasQty
+    };
+};
+
 const refreshCartAvailability = async (cart, options = {}) => {
     for (let i = 0; i < cart.items.length; i += 1) {
         const item = cart.items[i];
@@ -155,7 +166,7 @@ const refreshCartAvailability = async (cart, options = {}) => {
             checkOutDate: item.checkOutDate,
             adults: item.adults,
             children: item.children,
-            quantity: item.quantity
+            ...cartItemQuantityInput(item)
         };
         const result = await evaluateCartItemAvailability(item.roomId, input, options);
         if (!result.ok || !result.room) {
@@ -175,7 +186,7 @@ const getCartItemUnavailableMessage = async (item, options = {}) => {
         checkOutDate: item.checkOutDate,
         adults: item.adults,
         children: item.children,
-        quantity: item.quantity
+        ...cartItemQuantityInput(item)
     };
     const result = await evaluateCartItemAvailability(item.roomId, input, options);
     return (

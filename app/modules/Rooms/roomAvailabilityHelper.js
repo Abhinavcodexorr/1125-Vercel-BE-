@@ -121,14 +121,24 @@ const resolveBookingQuantity = (room, { quantity, quantityProvided }) => {
     if (!isMultiQuantityRoom(room)) {
         return { quantity: 1, quantityProvided: false, invalidQuantity: false };
     }
-    if (quantityProvided && (quantity == null || quantity < 1)) {
+
+    // Explicitly sent but invalid (e.g. quantity=0 from client)
+    if (quantityProvided === true && (quantity == null || quantity < 1)) {
         return { quantity: null, quantityProvided: true, invalidQuantity: true };
     }
-    return {
-        quantity: quantityProvided ? quantity : 1,
-        quantityProvided,
-        invalidQuantity: false
-    };
+
+    // Omitted on request → default 1 unit
+    if (quantityProvided === false) {
+        return { quantity: 1, quantityProvided: false, invalidQuantity: false };
+    }
+
+    // Valid quantity from request, cart item, or booking create (quantityProvided may be unset)
+    const parsed = parseInt(quantity, 10);
+    if (Number.isFinite(parsed) && parsed >= 1) {
+        return { quantity: parsed, quantityProvided: true, invalidQuantity: false };
+    }
+
+    return { quantity: 1, quantityProvided: false, invalidQuantity: false };
 };
 
 const getBookingUnitCount = (booking) => {
