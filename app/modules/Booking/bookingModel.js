@@ -343,9 +343,9 @@ bookingSchema.methods.getFormattedBooking = function() {
         paymentStatus: this.paymentStatus,
         transactionId: this.transactionId, // Included for all bookings including cancelled ones (may be null if cancelled before payment)
         paymentDate: this.paymentDate,
-        cancelledAt: this.cancelledAt,
+        cancelledAt: this.cancelledAt || null,
         holdExpiresAt: this.holdExpiresAt || null,
-        cancellationReason: this.cancellationReason,
+        cancellationReason: this.cancellationReason || null,
         cancellationFee: this.cancellationFee,
         createdAt: this.createdAt,
         updatedAt: this.updatedAt

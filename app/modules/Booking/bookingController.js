@@ -629,9 +629,14 @@ const updateBookingStatus = async (req, res) => {
         if (!status || !validStatuses.includes(status)) {
             return response.error400(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
         }
+        const update = { status };
+        if (status === 'Cancelled') {
+            update.cancelledAt = new Date();
+        }
+
         const booking = await Booking.findOneAndUpdate(
             { _id: req.params.id, isDeleted: { $ne: true } },
-            { status },
+            update,
             { new: true }
         );
         if (!booking) {
