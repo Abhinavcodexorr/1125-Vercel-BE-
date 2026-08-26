@@ -192,7 +192,14 @@ async function sendCancellationEmail(booking, packageDetailsMap = new Map(), opt
     }
 
     if (hasCabinStay) {
+        const roomQtyRaw = parseInt(booking.roomQuantity, 10);
+        const roomQuantity = Number.isFinite(roomQtyRaw) && roomQtyRaw >= 1 ? roomQtyRaw : 1;
         pushDetailRow(detailRows, 'Room', cabinName || 'N/A');
+        pushDetailRow(
+            detailRows,
+            'Quantity',
+            `${roomQuantity} unit${roomQuantity !== 1 ? 's' : ''}`
+        );
         pushDetailRow(detailRows, 'Check-in', formatDateLong(cabinCheckIn));
         pushDetailRow(detailRows, 'Check-out', formatDateLong(cabinCheckOut));
         pushDetailRow(detailRows, 'Guests', guestsLabel);

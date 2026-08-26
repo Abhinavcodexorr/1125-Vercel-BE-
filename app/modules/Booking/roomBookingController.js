@@ -36,16 +36,27 @@ const {
     getBookingInProgressRecipient
 } = require('./bookingInProgressEmailTemplate');
 
+const resolveBookingUnitCount = (booking) => {
+    const qty = parseInt(booking?.roomQuantity, 10);
+    return Number.isFinite(qty) && qty >= 1 ? qty : 1;
+};
+
 const buildEmailBookingPayload = (bookings) => {
     const primary = bookings[0];
     const plain = primary.toObject ? primary.toObject() : { ...primary };
     plain.totalAmount = bookings.reduce((sum, b) => sum + Number(b.totalAmount || 0), 0);
     plain.bookingReference = primary.bookingReference;
+    // Sum units across line items so confirmation / in-progress emails stay accurate
+    plain.roomQuantity = bookings.reduce((sum, b) => sum + resolveBookingUnitCount(b), 0);
     return {
         payload: plain,
         roomName:
             bookings
-                .map((b) => b.roomSnapshot?.title)
+                .map((b) => {
+                    const title = b.roomSnapshot?.title || 'Room';
+                    const qty = resolveBookingUnitCount(b);
+                    return bookings.length > 1 && qty > 1 ? `${title} × ${qty}` : title;
+                })
                 .filter(Boolean)
                 .join(', ') || 'Room'
     };

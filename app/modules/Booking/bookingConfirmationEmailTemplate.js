@@ -36,6 +36,17 @@ const formatGuests = (adults = 0, children = 0) => {
     return parts.join(', ');
 };
 
+/** Booked room/chalet units (never inventory stock). */
+const getBookingRoomQuantity = (booking) => {
+    const qty = parseInt(booking?.roomQuantity, 10);
+    return Number.isFinite(qty) && qty >= 1 ? qty : 1;
+};
+
+const formatRoomQuantity = (booking) => {
+    const qty = getBookingRoomQuantity(booking);
+    return `${qty} unit${qty !== 1 ? 's' : ''}`;
+};
+
 const formatAmount = (amount, currency) => {
     const prefix = getCurrencyDisplayPrefix(currency);
     const value = Number(amount);
@@ -57,6 +68,7 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
     const checkIn = formatBookingDate(booking?.checkInDate, 'after 2:00 PM');
     const checkOut = formatBookingDate(booking?.checkOutDate, 'before 11:00 AM');
     const guests = formatGuests(booking?.adults, booking?.children);
+    const quantity = formatRoomQuantity(booking);
     const amountPaid = formatAmount(booking?.totalAmount, booking?.currency);
     const room =
         roomName ||
@@ -261,6 +273,8 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
                                     <span class="detail-value">${escapeHtml(checkOut)}</span>
                                     <span class="detail-label">Room</span>
                                     <span class="detail-value">${escapeHtml(room)}</span>
+                                    <span class="detail-label">Quantity</span>
+                                    <span class="detail-value">${escapeHtml(quantity)}</span>
                                     <span class="detail-label">Guests</span>
                                     <span class="detail-value">${escapeHtml(guests)}</span>
                                     <span class="detail-label">Amount Paid</span>
