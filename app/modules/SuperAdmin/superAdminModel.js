@@ -41,7 +41,8 @@ const superAdminSchema = new mongoose.Schema({
         default: false
     },
     lastLogin: {
-        type: Date
+        type: Date,
+        default: null
     },
     loginAttempts: {
         type: Number,
@@ -120,4 +121,34 @@ superAdminSchema.methods.resetLoginAttempts = function() {
     });
 };
 
+/** Safe staff payload for list/detail APIs (never exposes password/token). */
+superAdminSchema.methods.getFormattedStaff = function() {
+    return formatStaffDocument(this);
+};
+
+const formatStaffDocument = (doc = {}) => {
+    const firstName = doc.firstName || '';
+    const lastName = doc.lastName || '';
+    const fullName = `${firstName} ${lastName}`.trim() || doc.email || '';
+    const lastLogin = doc.lastLogin || null;
+
+    return {
+        id: doc._id,
+        _id: doc._id,
+        firstName,
+        lastName,
+        fullName,
+        email: doc.email,
+        role: doc.role,
+        isActive: Boolean(doc.isActive),
+        isBlocked: Boolean(doc.isBlocked),
+        lastLogin,
+        hasLoggedIn: Boolean(lastLogin),
+        hasActiveSession: Boolean(doc.activeToken),
+        createdAt: doc.createdAt || null,
+        updatedAt: doc.updatedAt || null
+    };
+};
+
 module.exports = mongoose.model('SuperAdmin', superAdminSchema);
+module.exports.formatStaffDocument = formatStaffDocument;

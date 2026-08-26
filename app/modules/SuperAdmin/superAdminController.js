@@ -1,9 +1,15 @@
 const SuperAdmin = require('./superAdminModel');
+const formatStaffDocument = SuperAdmin.formatStaffDocument;
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const config = require('../../config/auth.config');
 const response = require('../../helper/response');
 const sendEmail = require('../../middleware/mail');
+
+const STAFF_SELECT =
+    'firstName lastName email role isActive isBlocked lastLogin activeToken createdAt updatedAt';
+
+const shapeStaff = (doc) => formatStaffDocument(doc);
 // Update password (SuperAdmin, SubAdmin, Manager – each can update own password)
 const updatePassword = async (req, res) => {
     try {
@@ -78,9 +84,10 @@ const login = async (req, res) => {
             { expiresIn: config.ADMIN_JWT_EXPIRES_IN }
         );
 
+        const now = new Date();
         await SuperAdmin.findByIdAndUpdate(superAdmin._id, { 
             activeToken: token,
-            lastLogin: new Date()
+            lastLogin: now
         });
 
         console.log(`${superAdmin.role} login successful: ${superAdmin.email}`);
@@ -89,9 +96,12 @@ const login = async (req, res) => {
             token: token,
             user: {
                 id: superAdmin._id,
+                firstName: superAdmin.firstName || '',
+                lastName: superAdmin.lastName || '',
+                fullName: `${superAdmin.firstName || ''} ${superAdmin.lastName || ''}`.trim() || superAdmin.email,
                 email: superAdmin.email,
                 role: superAdmin.role,
-                lastLogin: superAdmin.lastLogin
+                lastLogin: now
             },
             expiresIn: config.ADMIN_JWT_EXPIRES_IN
         });
@@ -191,20 +201,14 @@ const logout = async (req, res) => {
 const getCurrentUser = async (req, res) => {
     try {
         const superAdmin = await SuperAdmin.findById(req.userId)
-            .select('email role lastLogin createdAt')
+            .select(STAFF_SELECT)
             .lean();
 
         if (!superAdmin) {
             return response.notFound404(res, "SuperAdmin not found");
         }
 
-        return response.success200(res, "User information retrieved", {
-            id: superAdmin._id,
-            email: superAdmin.email,
-            role: superAdmin.role,
-            lastLogin: superAdmin.lastLogin,
-            createdAt: superAdmin.createdAt
-        });
+        return response.success200(res, "User information retrieved", shapeStaff(superAdmin));
 
     } catch (error) {
         console.error(`Error retrieving user info: ${error.message}`);
@@ -348,13 +352,7 @@ const createSubAdmin = async (req, res) => {
             await existing.save();
             console.log(`SubAdmin restored: ${existing.email}`);
             return response.created201(res, "SubAdmin created successfully", {
-                id: existing._id,
-                firstName: existing.firstName,
-                lastName: existing.lastName,
-                email: existing.email,
-                role: existing.role,
-                isActive: existing.isActive,
-                isBlocked: existing.isBlocked,
+                ...shapeStaff(existing),
                 generatedPassword: password ? undefined : generatedPassword
             });
         }
@@ -373,13 +371,7 @@ const createSubAdmin = async (req, res) => {
         console.log(`SubAdmin created: ${subAdmin.email}`);
 
         return response.created201(res, "SubAdmin created successfully", {
-            id: subAdmin._id,
-            firstName: subAdmin.firstName,
-            lastName: subAdmin.lastName,
-            email: subAdmin.email,
-            role: subAdmin.role,
-            isActive: subAdmin.isActive,
-            isBlocked: subAdmin.isBlocked,
+            ...shapeStaff(subAdmin),
             generatedPassword: password ? undefined : generatedPassword
         });
     } catch (error) {
@@ -396,14 +388,14 @@ const getSubAdminById = async (req, res) => {
     try {
         const { id } = req.params;
         const subAdmin = await SuperAdmin.findOne({ _id: id, role: { $in: ['SubAdmin', 'Manager'] }, isDeleted: false })
-            .select('firstName lastName email role isActive isBlocked lastLogin createdAt updatedAt')
+            .select(STAFF_SELECT)
             .lean();
 
         if (!subAdmin) {
             return response.notFound404(res, "SubAdmin not found");
         }
 
-        return response.success200(res, "SubAdmin retrieved successfully", subAdmin);
+        return response.success200(res, "SubAdmin retrieved successfully", shapeStaff(subAdmin));
     } catch (error) {
         console.error(`Error retrieving subadmin: ${error.message}`);
         return response.serverError500(res, "Error retrieving subadmin", error.message);
@@ -414,11 +406,13 @@ const getSubAdminById = async (req, res) => {
 const getSubAdmins = async (req, res) => {
     try {
         const subAdmins = await SuperAdmin.find({ role: { $in: ['SubAdmin', 'Manager'] }, isDeleted: false })
-            .select('firstName lastName email role isActive isBlocked lastLogin createdAt updatedAt')
+            .select(STAFF_SELECT)
             .sort({ createdAt: -1 })
             .lean();
 
-        return response.success200(res, "SubAdmins retrieved successfully", subAdmins);
+        const data = subAdmins.map(shapeStaff);
+
+        return response.success200(res, "SubAdmins retrieved successfully", data);
     } catch (error) {
         console.error(`Error retrieving subadmins: ${error.message}`);
         return response.serverError500(res, "Error retrieving subadmins", error.message);
@@ -476,10 +470,10 @@ const updateSubAdmin = async (req, res) => {
         await staff.save();
 
         const result = await SuperAdmin.findById(id)
-            .select('firstName lastName email role isActive isBlocked lastLogin createdAt updatedAt')
+            .select(STAFF_SELECT)
             .lean();
 
-        return response.success200(res, "SubAdmin updated successfully", result);
+        return response.success200(res, "SubAdmin updated successfully", shapeStaff(result));
     } catch (error) {
         if (error.code === 11000) {
             return response.error400(res, "Email already in use by another account");
@@ -502,7 +496,7 @@ const blockSubAdmin = async (req, res) => {
                 activeToken: null
             },
             { new: true }
-        ).select('firstName lastName email role isActive isBlocked');
+        ).select(STAFF_SELECT).lean();
 
         if (!subAdmin) {
             return response.notFound404(res, "SubAdmin not found");
@@ -511,7 +505,7 @@ const blockSubAdmin = async (req, res) => {
         return response.success200(
             res,
             isBlocked ? "SubAdmin blocked successfully" : "SubAdmin unblocked successfully",
-            subAdmin
+            shapeStaff(subAdmin)
         );
     } catch (error) {
         console.error(`Error updating subadmin block status: ${error.message}`);
