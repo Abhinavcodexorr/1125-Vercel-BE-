@@ -6,6 +6,7 @@ const msg = require('./roomMessages');
 const {
     getAllRoomBlockingBookings,
     getRoomBlockingBookingsByRoomIds,
+    collectBookingsForRoomAvailability,
     buildFullRoomAvailability,
     getRoomBlockedDateData,
     validateRoomQuantityUpdate,
@@ -410,7 +411,7 @@ const getRoomsForWebsite = async (req, res) => {
         });
 
         let shaped = rooms.map((room) => {
-            const bookings = bookingsByRoom[String(room._id)] || [];
+            const bookings = collectBookingsForRoomAvailability(room._id, bookingsByRoom);
             const stayEval = evaluateRoomStay(room, bookings, stay);
             return { rawRoom: room, stayEval, createdAt: room.createdAt };
         });

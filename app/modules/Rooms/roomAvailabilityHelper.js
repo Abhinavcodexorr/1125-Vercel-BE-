@@ -1,8 +1,61 @@
 const Booking = require('../Booking/bookingModel');
+const { ROOM_COMBO_CONFLICTS } = require('../../config/roomConflict.config');
 
 /** Paid, confirmed stays always block availability. */
 const BLOCKING_STATUSES = ['Confirmed', 'Checked-In', 'Checked-Out'];
 const BLOCKING_PAYMENT_STATUSES = ['paid'];
+
+const normalizeRoomId = (id) => String(id || '');
+
+/**
+ * Room IDs whose bookings should count against availability for `roomId`.
+ * Suite ← own + Standard + Deluxe bookings
+ * Standard/Deluxe ← own + Suite bookings (not the other component)
+ */
+const getAvailabilityBlockingRoomIds = (roomId) => {
+    const id = normalizeRoomId(roomId);
+    if (!id) return [];
+
+    const ids = new Set([id]);
+    (ROOM_COMBO_CONFLICTS || []).forEach((combo) => {
+        const comboId = normalizeRoomId(combo.comboRoomId);
+        const components = (combo.componentRoomIds || []).map(normalizeRoomId).filter(Boolean);
+        if (!comboId || !components.length) return;
+
+        if (id === comboId) {
+            components.forEach((componentId) => ids.add(componentId));
+            return;
+        }
+        if (components.includes(id)) {
+            ids.add(comboId);
+        }
+    });
+
+    return [...ids];
+};
+
+/** Expand a list of room IDs so conflict partners are included in bulk fetches. */
+const expandRoomIdsWithConflicts = (roomIds = []) => {
+    const set = new Set();
+    roomIds.forEach((roomId) => {
+        getAvailabilityBlockingRoomIds(roomId).forEach((id) => set.add(id));
+    });
+    return [...set];
+};
+
+/**
+ * From a roomId → bookings map, collect bookings that affect this room's availability.
+ */
+const collectBookingsForRoomAvailability = (roomId, bookingsByRoom = {}) => {
+    const collected = [];
+    getAvailabilityBlockingRoomIds(roomId).forEach((id) => {
+        const list = bookingsByRoom[normalizeRoomId(id)];
+        if (Array.isArray(list) && list.length) {
+            collected.push(...list);
+        }
+    });
+    return collected;
+};
 
 const getBookingHoldMinutes = () => {
     const parsed = parseInt(process.env.ROOM_BOOKING_HOLD_MINUTES, 10);
@@ -15,7 +68,7 @@ const getHoldExpiresAt = (fromDate = new Date()) => {
     return expiresAt;
 };
 
-const roomBlockingBookingQuery = (roomId) => {
+const roomBlockingBookingQuery = (roomIdOrIds) => {
     const now = new Date();
     const holdCutoff = new Date(now.getTime() - getBookingHoldMinutes() * 60 * 1000);
 
@@ -39,9 +92,16 @@ const roomBlockingBookingQuery = (roomId) => {
             }
         ]
     };
-    if (roomId) {
-        query.roomId = roomId;
+
+    if (roomIdOrIds != null) {
+        const ids = (Array.isArray(roomIdOrIds) ? roomIdOrIds : [roomIdOrIds]).filter(Boolean);
+        if (ids.length === 1) {
+            query.roomId = ids[0];
+        } else if (ids.length > 1) {
+            query.roomId = { $in: ids };
+        }
     }
+
     return query;
 };
 
@@ -160,7 +220,8 @@ const buildBookingCountByDate = (bookings) => {
 const getAllRoomBlockingBookings = async (roomId, options = {}) => {
     const { excludeBookingIds = [], excludeCartId = null } = options;
     const excludeSet = new Set(excludeBookingIds.map(String));
-    const bookings = await Booking.find(roomBlockingBookingQuery(roomId))
+    const roomIds = getAvailabilityBlockingRoomIds(roomId);
+    const bookings = await Booking.find(roomBlockingBookingQuery(roomIds))
         .select(BLOCKING_BOOKING_SELECT)
         .sort({ checkInDate: 1 })
         .lean();
@@ -175,11 +236,9 @@ const getAllRoomBlockingBookings = async (roomId, options = {}) => {
 };
 
 const getRoomBlockingBookingsByRoomIds = async (roomIds = []) => {
-    if (!roomIds.length) return [];
-    return Booking.find({
-        ...roomBlockingBookingQuery(),
-        roomId: { $in: roomIds }
-    })
+    const expandedIds = expandRoomIdsWithConflicts(roomIds);
+    if (!expandedIds.length) return [];
+    return Booking.find(roomBlockingBookingQuery(expandedIds))
         .select(BLOCKING_BOOKING_SELECT)
         .sort({ checkInDate: 1 })
         .lean();
@@ -498,6 +557,9 @@ module.exports = {
     getMaxGuestsForStay,
     getAllRoomBlockingBookings,
     getRoomBlockingBookingsByRoomIds,
+    getAvailabilityBlockingRoomIds,
+    expandRoomIdsWithConflicts,
+    collectBookingsForRoomAvailability,
     roomBlockingBookingQuery,
     buildFullRoomAvailability,
     getOccupiedDateKeysForBooking,
