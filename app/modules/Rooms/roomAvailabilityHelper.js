@@ -199,6 +199,40 @@ const getRoomQuantity = (room) => {
     return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
 };
 
+const getQuantityOverrideMap = (room) => {
+    const map = new Map();
+    (room?.quantityOverrides || []).forEach((item) => {
+        const key = formatDateKey(toDateOnly(item?.date));
+        const qty = parseInt(item?.quantity, 10);
+        if (key && Number.isFinite(qty) && qty >= 0) {
+            map.set(key, qty);
+        }
+    });
+    return map;
+};
+
+/** Sellable units for one date (admin override capped at room.quantity). */
+const getEffectiveQuantityForDate = (room, dateKey, overrideMap = null) => {
+    const base = getRoomQuantity(room);
+    const map = overrideMap || getQuantityOverrideMap(room);
+    if (!dateKey || !map.has(dateKey)) return base;
+    const override = map.get(dateKey);
+    return Math.min(base, Math.max(0, override));
+};
+
+const shapeQuantityOverridesForApi = (room) =>
+    (room?.quantityOverrides || [])
+        .map((item) => {
+            const date = toDateOnly(item?.date);
+            if (!date) return null;
+            return {
+                _id: item._id,
+                date: formatDateKey(date),
+                quantity: parseInt(item.quantity, 10)
+            };
+        })
+        .filter(Boolean);
+
 /** Only rooms with quantity > 1 need quantity in cart / booking requests. */
 const isMultiQuantityRoom = (room) => {
     const quantity = parseInt(room?.quantity, 10);
@@ -323,8 +357,17 @@ const getAvailableWindowEnd = (bookings, blockedDates, today) => {
 };
 
 const buildFullRoomAvailability = (room, bookings, options = {}) => {
-    const quantity = getRoomQuantity(room);
+    const maxQuantity = getRoomQuantity(room);
+    const overrideMap = getQuantityOverrideMap(room);
     const bookingCountByDate = buildBookingCountByDate(bookings);
+
+    const dayQuantity = (dateKey) => getEffectiveQuantityForDate(room, dateKey, overrideMap);
+    const dayAvailableUnits = (dateKey, bookedCount, blocked) => {
+        if (blocked) return 0;
+        return Math.max(dayQuantity(dateKey) - bookedCount, 0);
+    };
+    const dayFullyBooked = (dateKey, bookedCount, blocked) =>
+        blocked || bookedCount >= dayQuantity(dateKey);
 
     const booked = bookings.map((booking) => {
         const occupiedDates = getOccupiedDateKeysForBooking(booking.checkInDate, booking.checkOutDate);
@@ -352,32 +395,32 @@ const buildFullRoomAvailability = (room, bookings, options = {}) => {
     const partiallyBookedDates = [];
     const occupancyByDate = {};
 
-    bookingCountByDate.forEach((bookedCount, dateKey) => {
-        const blocked = blockedDateSet.has(dateKey);
-        const availableUnits = blocked ? 0 : Math.max(quantity - bookedCount, 0);
+    const upsertOccupancy = (dateKey, bookedCount, blocked) => {
+        const qty = dayQuantity(dateKey);
+        const availableUnits = dayAvailableUnits(dateKey, bookedCount, blocked);
         occupancyByDate[dateKey] = {
             bookedCount,
             availableUnits,
-            quantity,
+            quantity: qty,
+            maxQuantity: maxQuantity,
+            overrideQuantity: overrideMap.has(dateKey) ? overrideMap.get(dateKey) : null,
             blocked
         };
-        if (blocked || bookedCount >= quantity) {
+        if (dayFullyBooked(dateKey, bookedCount, blocked)) {
             fullyBookedDates.push(dateKey);
         } else if (bookedCount > 0) {
             partiallyBookedDates.push(dateKey);
         }
+    };
+
+    bookingCountByDate.forEach((bookedCount, dateKey) => {
+        upsertOccupancy(dateKey, bookedCount, blockedDateSet.has(dateKey));
     });
 
     blockedDateSet.forEach((dateKey) => {
         if (!occupancyByDate[dateKey]) {
-            occupancyByDate[dateKey] = {
-                bookedCount: bookingCountByDate.get(dateKey) || 0,
-                availableUnits: 0,
-                quantity,
-                blocked: true
-            };
-        }
-        if (!fullyBookedDates.includes(dateKey)) {
+            upsertOccupancy(dateKey, bookingCountByDate.get(dateKey) || 0, true);
+        } else if (!fullyBookedDates.includes(dateKey)) {
             fullyBookedDates.push(dateKey);
         }
     });
@@ -394,19 +437,13 @@ const buildFullRoomAvailability = (room, bookings, options = {}) => {
     const availableDates = futureDateKeys.filter((dateKey) => {
         if (blockedDateSet.has(dateKey)) return false;
         const bookedCount = bookingCountByDate.get(dateKey) || 0;
-        return bookedCount < quantity;
+        return bookedCount < dayQuantity(dateKey);
     });
 
     futureDateKeys.forEach((dateKey) => {
         if (!occupancyByDate[dateKey]) {
-            occupancyByDate[dateKey] = {
-                bookedCount: bookingCountByDate.get(dateKey) || 0,
-                availableUnits: blockedDateSet.has(dateKey)
-                    ? 0
-                    : Math.max(quantity - (bookingCountByDate.get(dateKey) || 0), 0),
-                quantity,
-                blocked: blockedDateSet.has(dateKey)
-            };
+            const blocked = blockedDateSet.has(dateKey);
+            upsertOccupancy(dateKey, bookingCountByDate.get(dateKey) || 0, blocked);
         }
     });
 
@@ -416,7 +453,7 @@ const buildFullRoomAvailability = (room, bookings, options = {}) => {
             title: room.title,
             slug: room.slug,
             type: room.type,
-            quantity
+            quantity: maxQuantity
         },
         booked,
         blocked: ownBlockedData.blocked,
@@ -427,6 +464,7 @@ const buildFullRoomAvailability = (room, bookings, options = {}) => {
         partiallyBookedDates,
         availableDates,
         occupancyByDate,
+        quantityOverrides: shapeQuantityOverridesForApi(room),
         availableFrom: formatDateKey(today),
         availableUntil: formatDateKey(windowEnd),
         summary: {
@@ -437,7 +475,7 @@ const buildFullRoomAvailability = (room, bookings, options = {}) => {
             totalUnavailableDays: bookedDates.length,
             totalPartiallyBookedDays: partiallyBookedDates.length,
             totalAvailableDays: availableDates.length,
-            quantity
+            quantity: maxQuantity
         }
     };
 };
@@ -483,7 +521,8 @@ const getMaxGuestsForStay = (room, requestedQuantity = 1) => {
 };
 
 const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, requestedQuantity = 1) => {
-    const quantity = getRoomQuantity(room);
+    const maxQuantity = getRoomQuantity(room);
+    const overrideMap = getQuantityOverrideMap(room);
     const bookingCountByDate = buildBookingCountByDate(bookings);
     const { blockedDates: adminBlockedDates } = getRoomBlockedDateData(room.blockedDates || []);
     const blockedDateSet = new Set(adminBlockedDates);
@@ -491,8 +530,8 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
 
     if (!stayDates.length) {
         return {
-            quantity,
-            availableUnits: quantity,
+            quantity: maxQuantity,
+            availableUnits: maxQuantity,
             bookedUnits: 0,
             available: true,
             reason: null,
@@ -501,13 +540,14 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
     }
 
     let maxBookedCount = 0;
-    let minAvailableUnits = quantity;
+    let minAvailableUnits = maxQuantity;
 
     for (const dateKey of stayDates) {
+        const dayQty = getEffectiveQuantityForDate(room, dateKey, overrideMap);
         if (blockedDateSet.has(dateKey)) {
             const bookedCount = bookingCountByDate.get(dateKey) || 0;
             return {
-                quantity,
+                quantity: dayQty,
                 availableUnits: 0,
                 bookedUnits: bookedCount,
                 available: false,
@@ -518,11 +558,14 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
 
         const bookedCount = bookingCountByDate.get(dateKey) || 0;
         maxBookedCount = Math.max(maxBookedCount, bookedCount);
-        minAvailableUnits = Math.min(minAvailableUnits, Math.max(quantity - bookedCount, 0));
+        minAvailableUnits = Math.min(
+            minAvailableUnits,
+            Math.max(dayQty - bookedCount, 0)
+        );
 
-        if (bookedCount >= quantity) {
+        if (bookedCount >= dayQty) {
             return {
-                quantity,
+                quantity: dayQty,
                 availableUnits: 0,
                 bookedUnits: bookedCount,
                 available: false,
@@ -538,7 +581,7 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
 
     if (minAvailableUnits < unitsNeeded) {
         return {
-            quantity,
+            quantity: maxQuantity,
             availableUnits: minAvailableUnits,
             bookedUnits: maxBookedCount,
             requestedQuantity: unitsNeeded,
@@ -551,7 +594,7 @@ const getStayQuantityStatus = (room, bookings, checkInDate, checkOutDate, reques
     }
 
     return {
-        quantity,
+        quantity: maxQuantity,
         availableUnits: minAvailableUnits,
         bookedUnits: maxBookedCount,
         requestedQuantity: unitsNeeded,
@@ -607,6 +650,9 @@ module.exports = {
     buildBookingCountByDate,
     getBookingUnitCount,
     getRoomQuantity,
+    getQuantityOverrideMap,
+    getEffectiveQuantityForDate,
+    shapeQuantityOverridesForApi,
     isMultiQuantityRoom,
     resolveBookingQuantity,
     getMaxConcurrentBookings,

@@ -9,6 +9,7 @@ const {
     collectBookingsForRoomAvailability,
     getConflictPartnerBlockedDateDocs,
     withEffectiveBlockedDates,
+    buildBookingCountByDate,
     buildFullRoomAvailability,
     getRoomBlockedDateData,
     validateRoomQuantityUpdate,
@@ -553,7 +554,7 @@ const checkRoomStayAvailability = async (req, res) => {
 
 const loadRoomForAvailability = async (req, res) => {
     const room = await Room.findOne(buildRoomLookup(req.params.id, { isActive: true }))
-        .select('title slug type quantity blockedDates')
+        .select('title slug type quantity blockedDates quantityOverrides')
         .lean();
     if (!room) {
         response.notFound404(res, msg.ROOM_NOT_FOUND);
@@ -562,13 +563,7 @@ const loadRoomForAvailability = async (req, res) => {
     return room;
 };
 
-/**
- * Full calendar availability for admin (and website).
- * Includes per-date quantity occupancy so multi-unit rooms show partial vs full.
- * Admin can block/unblock dates via POST/DELETE .../blocked-dates (own blocks only).
- * Conflict-partner admin blocks still mark dates unavailable on the calendar.
- * GET /rooms/:id/availability
- */
+/** Public / simple admin block calendar — fully booked dates only. */
 const getRoomAvailability = async (req, res) => {
     try {
         const room = await loadRoomForAvailability(req, res);
@@ -585,22 +580,146 @@ const getRoomAvailability = async (req, res) => {
         });
 
         return response.success200(res, msg.ROOM_AVAILABILITY_RETRIEVED, {
-            room: availability.room,
-            booked: availability.booked,
-            blocked: availability.blocked,
-            bookingBookedDates: availability.bookingBookedDates,
-            blockedDates: availability.blockedDates,
-            bookedDates: availability.bookedDates,
-            partiallyBookedDates: availability.partiallyBookedDates,
-            availableDates: availability.availableDates,
-            occupancyByDate: availability.occupancyByDate,
-            availableFrom: availability.availableFrom,
-            availableUntil: availability.availableUntil,
-            summary: availability.summary
+            bookedDates: availability.bookedDates
         });
     } catch (error) {
         console.error('Get room availability error:', error.message);
         return response.serverError500(res, msg.GET_FAILED, error.message);
+    }
+};
+
+/** Admin quantity calendar with occupancy + per-date overrides. */
+const getRoomQuantityCalendar = async (req, res) => {
+    try {
+        const room = await loadRoomForAvailability(req, res);
+        if (!room) return;
+
+        const [bookings, partnerBlocked] = await Promise.all([
+            getAllRoomBlockingBookings(room._id),
+            getConflictPartnerBlockedDateDocs(room._id)
+        ]);
+        const ownBlockedDates = room.blockedDates || [];
+        const availability = buildFullRoomAvailability(room, bookings, {
+            ownBlockedDates,
+            effectiveBlockedDates: [...ownBlockedDates, ...partnerBlocked]
+        });
+
+        return response.success200(res, msg.ROOM_QUANTITY_CALENDAR_RETRIEVED, {
+            room: availability.room,
+            booked: availability.booked,
+            bookedDates: availability.bookedDates,
+            partiallyBookedDates: availability.partiallyBookedDates,
+            availableDates: availability.availableDates,
+            occupancyByDate: availability.occupancyByDate,
+            quantityOverrides: availability.quantityOverrides,
+            summary: availability.summary
+        });
+    } catch (error) {
+        console.error('Get room quantity calendar error:', error.message);
+        return response.serverError500(res, msg.GET_FAILED, error.message);
+    }
+};
+
+const normalizeQuantityOverrideInput = (body) => {
+    const raw = Array.isArray(body?.overrides) ? body.overrides : body?.date ? [body] : [];
+    return raw
+        .map((item) => {
+            const date = toDateOnly(item?.date);
+            if (!date) return null;
+            if (item.quantity == null || item.quantity === '') {
+                return { date, remove: true };
+            }
+            const quantity = parseInt(item.quantity, 10);
+            if (!Number.isFinite(quantity) || quantity < 0) return null;
+            return { date, quantity, remove: false };
+        })
+        .filter(Boolean);
+};
+
+const setRoomQuantityOverrides = async (req, res) => {
+    try {
+        const existing = await resolveRoom(req.params.id);
+        if (!existing) {
+            return response.notFound404(res, msg.ROOM_NOT_FOUND);
+        }
+
+        const maxQuantity = getRoomQuantity(existing);
+        if (maxQuantity <= 1) {
+            return response.error400(res, msg.QUANTITY_MIN);
+        }
+
+        const overrides = normalizeQuantityOverrideInput(req.body);
+        if (!overrides.length) {
+            return response.error400(res, msg.QUANTITY_OVERRIDE_INVALID);
+        }
+
+        const bookings = await getAllRoomBlockingBookings(existing._id);
+        const bookingCountByDate = buildBookingCountByDate(bookings);
+
+        for (const item of overrides) {
+            const dateKey = formatDateKey(item.date);
+            if (item.remove) {
+                existing.quantityOverrides = existing.quantityOverrides.filter(
+                    (row) => formatDateKey(toDateOnly(row.date)) !== dateKey
+                );
+                continue;
+            }
+
+            if (item.quantity > maxQuantity) {
+                return response.error400(res, msg.QUANTITY_OVERRIDE_ABOVE_MAX, null, {
+                    data: { date: dateKey, maxQuantity }
+                });
+            }
+
+            const bookedCount = bookingCountByDate.get(dateKey) || 0;
+            if (item.quantity < bookedCount) {
+                return response.error400(res, msg.QUANTITY_OVERRIDE_BELOW_BOOKINGS, null, {
+                    data: { date: dateKey, bookedCount, quantity: item.quantity }
+                });
+            }
+
+            if (item.quantity === maxQuantity) {
+                existing.quantityOverrides = existing.quantityOverrides.filter(
+                    (row) => formatDateKey(toDateOnly(row.date)) !== dateKey
+                );
+                continue;
+            }
+
+            const index = existing.quantityOverrides.findIndex(
+                (row) => formatDateKey(toDateOnly(row.date)) === dateKey
+            );
+            if (index >= 0) {
+                existing.quantityOverrides[index].quantity = item.quantity;
+                existing.quantityOverrides[index].date = item.date;
+            } else {
+                existing.quantityOverrides.push({ date: item.date, quantity: item.quantity });
+            }
+        }
+
+        await existing.save();
+
+        const partnerBlocked = await getConflictPartnerBlockedDateDocs(existing._id);
+        const ownBlockedDates = existing.blockedDates || [];
+        const availability = buildFullRoomAvailability(existing.toObject(), bookings, {
+            ownBlockedDates,
+            effectiveBlockedDates: [...ownBlockedDates, ...partnerBlocked]
+        });
+
+        return response.success200(res, msg.ROOM_QUANTITY_OVERRIDES_UPDATED, {
+            room: {
+                _id: existing._id,
+                title: existing.title,
+                slug: existing.slug,
+                quantity: maxQuantity
+            },
+            quantityOverrides: availability.quantityOverrides,
+            occupancyByDate: availability.occupancyByDate,
+            bookedDates: availability.bookedDates,
+            partiallyBookedDates: availability.partiallyBookedDates
+        });
+    } catch (error) {
+        console.error('Set room quantity overrides error:', error.message);
+        return response.serverError500(res, msg.UPDATE_FAILED, error.message);
     }
 };
 
@@ -766,6 +885,8 @@ module.exports = {
     getRoomsForWebsite,
     getRoomByIdForWebsite,
     getRoomAvailability,
+    getRoomQuantityCalendar,
+    setRoomQuantityOverrides,
     checkRoomStayAvailability,
     blockRoomDates,
     getRoomBlockedDates,

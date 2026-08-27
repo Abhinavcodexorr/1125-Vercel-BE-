@@ -26,6 +26,8 @@ router.get('/:id/check-availability', roomController.checkRoomStayAvailability);
 router.get('/:id/blocked-dates', isSuperSub, roomController.getRoomBlockedDates);
 router.post('/:id/blocked-dates', isSuperSub, denySubAdminMutation, roomController.blockRoomDates);
 router.delete('/:id/blocked-dates/:blockId', isSuperSub, denySubAdminMutation, roomController.unblockRoomDates);
+router.get('/:id/quantity-calendar', isSuperSub, roomController.getRoomQuantityCalendar);
+router.put('/:id/quantity-overrides', isSuperSub, denySubAdminMutation, roomController.setRoomQuantityOverrides);
 router.get('/:id/availability', roomController.getRoomAvailability);
 router.get('/:id', roomController.getRoomByIdForWebsite);
 

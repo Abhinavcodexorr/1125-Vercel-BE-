@@ -19,6 +19,12 @@ const blockedDateSchema = new mongoose.Schema({
     reason: { type: String, trim: true, default: '' }
 }, { timestamps: true });
 
+/** Admin cap on sellable units for a specific calendar date (multi-unit rooms). */
+const quantityOverrideSchema = new mongoose.Schema({
+    date: { type: Date, required: true },
+    quantity: { type: Number, required: true, min: 0 }
+}, { timestamps: true });
+
 const roomSchema = new mongoose.Schema({
     title: { type: String, required: true, trim: true },
     slug: { type: String, required: true, trim: true, lowercase: true },
@@ -36,6 +42,7 @@ const roomSchema = new mongoose.Schema({
     amenities: { type: [amenitySchema], default: [] },
     images: { type: [roomImageSchema], default: [] },
     blockedDates: { type: [blockedDateSchema], default: [] },
+    quantityOverrides: { type: [quantityOverrideSchema], default: [] },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false }
 }, { timestamps: true });
@@ -77,6 +84,15 @@ const baseShape = (doc) => {
               reason: block.reason || '',
               createdAt: block.createdAt,
               updatedAt: block.updatedAt
+          }))
+        : [],
+    quantityOverrides: Array.isArray(doc.quantityOverrides)
+        ? doc.quantityOverrides.map((item) => ({
+              _id: item._id,
+              date: item.date,
+              quantity: item.quantity,
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt
           }))
         : [],
     isActive: doc.isActive,
