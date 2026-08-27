@@ -93,8 +93,8 @@ const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
     };
 };
 
-/** Admin dashboard / statistics — confirmed+paid count, cancelled+paid count, confirmed paid revenue. */
-const CONFIRMED_PAID_STATUSES = ['Confirmed', 'Checked-In', 'Checked-Out'];
+/** Admin dashboard / statistics — totals aligned with booking list filters. */
+const COMPLETED_STATUSES = ['Confirmed', 'Checked-In', 'Checked-Out'];
 
 const fetchBookingStatisticsSummary = async () => {
     const [stats] = await Booking.aggregate([
@@ -102,13 +102,30 @@ const fetchBookingStatisticsSummary = async () => {
         {
             $group: {
                 _id: null,
-                totalBookings: {
+                totalBookings: { $sum: 1 },
+                // Complete = paid and not cancelled (admin filter=paid)
+                completedBookings: {
                     $sum: {
                         $cond: [
                             {
                                 $and: [
                                     { $eq: ['$paymentStatus', 'paid'] },
-                                    { $in: ['$status', CONFIRMED_PAID_STATUSES] }
+                                    { $ne: ['$status', 'Cancelled'] }
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
+                // Pending / incomplete = not paid and not cancelled (admin filter=incomplete)
+                pendingBookings: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $not: { $in: ['$paymentStatus', ['paid', 'refunded']] } },
+                                    { $ne: ['$status', 'Cancelled'] }
                                 ]
                             },
                             1,
@@ -118,28 +135,34 @@ const fetchBookingStatisticsSummary = async () => {
                 },
                 cancelledBookings: {
                     $sum: {
-                        $cond: [
-                            {
-                                $and: [
-                                    { $eq: ['$paymentStatus', 'paid'] },
-                                    { $eq: ['$status', 'Cancelled'] }
-                                ]
-                            },
-                            1,
-                            0
-                        ]
+                        $cond: [{ $eq: ['$status', 'Cancelled'] }, 1, 0]
                     }
                 },
+                // Revenue from paid non-cancelled bookings
                 totalRevenue: {
                     $sum: {
                         $cond: [
                             {
                                 $and: [
                                     { $eq: ['$paymentStatus', 'paid'] },
-                                    { $in: ['$status', CONFIRMED_PAID_STATUSES] }
+                                    { $ne: ['$status', 'Cancelled'] }
                                 ]
                             },
                             { $ifNull: ['$totalAmount', 0] },
+                            0
+                        ]
+                    }
+                },
+                confirmedBookings: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $eq: ['$paymentStatus', 'paid'] },
+                                    { $in: ['$status', COMPLETED_STATUSES] }
+                                ]
+                            },
+                            1,
                             0
                         ]
                     }
@@ -148,10 +171,24 @@ const fetchBookingStatisticsSummary = async () => {
         }
     ]);
 
+    const totalBookings = stats?.totalBookings || 0;
+    const completedBookings = stats?.completedBookings || 0;
+    const pendingBookings = stats?.pendingBookings || 0;
+    const cancelledBookings = stats?.cancelledBookings || 0;
+    const totalRevenue = Number((stats?.totalRevenue || 0).toFixed(2));
+
     return {
-        totalBookings: stats?.totalBookings || 0,
-        cancelledBookings: stats?.cancelledBookings || 0,
-        totalRevenue: Number((stats?.totalRevenue || 0).toFixed(2))
+        totalBookings,
+        pendingBookings,
+        completedBookings,
+        cancelledBookings,
+        totalRevenue,
+        // Extra fields used by FE mapper / older clients
+        confirmedBookings: stats?.confirmedBookings || completedBookings,
+        averageBookingValue:
+            completedBookings > 0
+                ? Number((totalRevenue / completedBookings).toFixed(2))
+                : 0
     };
 };
 

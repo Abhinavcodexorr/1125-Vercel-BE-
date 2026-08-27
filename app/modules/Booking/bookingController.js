@@ -1332,16 +1332,16 @@ const checkPaymentStatus = async (req, res) => {
     }
 };
 
-// Dashboard API — same summary as /statistics (total, cancelled, confirmed paid revenue)
+// Dashboard API — same summary as /statistics
 const getDashboard = async (req, res) => {
     try {
         const dashboardData = await fetchBookingStatisticsSummary();
 
-        console.log("Dashboard statistics retrieved");
-        return response.success200(res, "Dashboard statistics retrieved successfully", dashboardData);
+        console.log('Dashboard statistics retrieved');
+        return response.success200(res, 'Dashboard statistics retrieved successfully', dashboardData);
     } catch (error) {
         console.error(`Error retrieving dashboard statistics: ${error.message}`);
-        return response.serverError500(res, "Error retrieving dashboard statistics", error.message);
+        return response.serverError500(res, 'Error retrieving dashboard statistics', error.message);
     }
 };
 
