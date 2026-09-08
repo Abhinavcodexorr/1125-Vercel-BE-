@@ -7,13 +7,27 @@ const Booking = require('./bookingModel');
 const formatGuest = (guest = {}) => {
     const firstName = guest.firstName || '';
     const lastName = guest.lastName || '';
+    const specialRequests =
+        guest.specialRequests ||
+        guest.specialRequest ||
+        guest.special_requests ||
+        guest.special_request ||
+        null;
     return {
         firstName,
         lastName,
         fullName: `${firstName} ${lastName}`.trim() || null,
         email: guest.email || null,
         mobileNumber: guest.mobileNumber || null,
-        country: guest.country || null
+        countryCode: guest.countryCode || null,
+        country: guest.country || null,
+        address1: guest.address1 || null,
+        address2: guest.address2 || null,
+        townOrCity: guest.townOrCity || null,
+        state: guest.state || null,
+        pincode: guest.pincode || null,
+        specialRequests,
+        specialRequest: specialRequests
     };
 };
 
@@ -48,6 +62,16 @@ const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
     const base = bookingDoc.getFormattedBooking();
     const bookingType = resolveBookingType(bookingDoc);
     const stayName = resolveStayName(bookingDoc);
+    const specialRequests =
+        base.specialRequests ||
+        base.specialRequest ||
+        base.guestDetails?.specialRequests ||
+        base.guestDetails?.specialRequest ||
+        bookingDoc.specialRequests ||
+        bookingDoc.specialRequest ||
+        bookingDoc.guestDetails?.specialRequests ||
+        bookingDoc.guestDetails?.specialRequest ||
+        null;
 
     return {
         _id: base._id,
@@ -70,7 +94,9 @@ const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
         nights: base.nights,
         adults: base.adults,
         children: base.children,
-        guest: formatGuest(base.guestDetails),
+        guest: formatGuest(base.guestDetails || bookingDoc.guestDetails),
+        specialRequests,
+        specialRequest: specialRequests,
         amounts: {
             subTotal: base.actualAmount,
             discount: base.discountApplied,

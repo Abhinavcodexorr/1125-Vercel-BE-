@@ -69,6 +69,12 @@ const buildBookingInProgressEmailHtml = ({ booking, roomName, submittedAt }) => 
     const guests = formatGuests(booking?.adults, booking?.children);
     const quantity = formatRoomQuantity(booking);
     const totalAmount = formatAmount(booking?.totalAmount, booking?.currency);
+    const specialRequests =
+        booking?.specialRequests ||
+        booking?.specialRequest ||
+        guest?.specialRequests ||
+        guest?.specialRequest ||
+        null;
     const room = roomName || booking?.roomSnapshot?.title || booking?.cabinId?.name || 'Room';
     const dateLabel = submittedAt
         ? new Date(submittedAt).toLocaleString(undefined, {
@@ -247,6 +253,7 @@ const buildBookingInProgressEmailHtml = ({ booking, roomName, submittedAt }) => 
                                     <span class="detail-value">${escapeHtml(guests)}</span>
                                     <span class="detail-label">Total Amount</span>
                                     <span class="detail-value highlight">${escapeHtml(totalAmount)}</span>
+                                    ${specialRequests ? `<span class="detail-label">Special Request</span><span class="detail-value">${escapeHtml(specialRequests)}</span>` : ''}
                                 </div>
                             </td>
                         </tr>

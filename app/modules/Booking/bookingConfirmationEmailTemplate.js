@@ -70,6 +70,12 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
     const guests = formatGuests(booking?.adults, booking?.children);
     const quantity = formatRoomQuantity(booking);
     const amountPaid = formatAmount(booking?.totalAmount, booking?.currency);
+    const specialRequests =
+        booking?.specialRequests ||
+        booking?.specialRequest ||
+        guest?.specialRequests ||
+        guest?.specialRequest ||
+        null;
     const room =
         roomName ||
         booking?.roomSnapshot?.title ||
@@ -279,6 +285,7 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
                                     <span class="detail-value">${escapeHtml(guests)}</span>
                                     <span class="detail-label">Amount Paid</span>
                                     <span class="detail-value highlight">${escapeHtml(amountPaid)}</span>
+                                    ${specialRequests ? `<span class="detail-label">Special Request</span><span class="detail-value">${escapeHtml(specialRequests)}</span>` : ''}
                                 </div>
                                 
                                 <p class="section-title">Villa Policies</p>

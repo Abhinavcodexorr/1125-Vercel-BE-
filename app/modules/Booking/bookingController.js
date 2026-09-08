@@ -335,6 +335,20 @@ const createBooking = async (req, res) => {
             return response.error400(res, "Cabin is sold out for these dates. Please try different dates.");
         }
 
+        const specialRequests =
+            guestDetails?.specialRequests ||
+            guestDetails?.specialRequest ||
+            guestDetails?.special_requests ||
+            guestDetails?.special_request ||
+            req.body.specialRequests ||
+            req.body.specialRequest ||
+            undefined;
+
+        if (specialRequests && guestDetails) {
+            guestDetails.specialRequests = String(specialRequests).trim();
+            guestDetails.specialRequest = String(specialRequests).trim();
+        }
+
         const bookingData = {
             cabinId,
             checkInDate: checkIn,
@@ -342,6 +356,8 @@ const createBooking = async (req, res) => {
             adults: requestedAdults,
             children: requestedChildren,
             guestDetails,
+            specialRequests: specialRequests ? String(specialRequests).trim() : undefined,
+            specialRequest: specialRequests ? String(specialRequests).trim() : undefined,
             cabinPricePerNight: cabin.pricePerNight,
             totalAmount: parseFloat(frontendAmount),
             currency: normalizeCurrencyCode(currency),
@@ -1378,13 +1394,27 @@ const buildCalendarGuest = (guestDetails = {}) => ({
     firstName: guestDetails.firstName || '',
     lastName: guestDetails.lastName || '',
     email: guestDetails.email || '',
-    mobileNumber: guestDetails.mobileNumber || ''
+    mobileNumber: guestDetails.mobileNumber || '',
+    specialRequests: guestDetails.specialRequests || guestDetails.specialRequest || null,
+    specialRequest: guestDetails.specialRequests || guestDetails.specialRequest || null
 });
 
 const buildCalendarEventBase = (booking, guest) => ({
     id: booking._id,
     bookingReference: booking.bookingReference,
     guest,
+    specialRequests:
+        booking.specialRequests ||
+        booking.specialRequest ||
+        booking.guestDetails?.specialRequests ||
+        booking.guestDetails?.specialRequest ||
+        null,
+    specialRequest:
+        booking.specialRequests ||
+        booking.specialRequest ||
+        booking.guestDetails?.specialRequests ||
+        booking.guestDetails?.specialRequest ||
+        null,
     adults: booking.adults,
     children: booking.children,
     totalAmount: booking.totalAmount,

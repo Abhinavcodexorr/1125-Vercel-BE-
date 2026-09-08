@@ -128,20 +128,37 @@ const removePreviousPendingBookingsForCart = async (cartId) => {
     });
 };
 
-const buildGuestDetails = (guestDetails = {}) => ({
-    firstName: String(guestDetails.firstName || '').trim(),
-    lastName: String(guestDetails.lastName || '').trim(),
-    email: String(guestDetails.email || '').trim(),
-    mobileNumber: String(guestDetails.mobileNumber || guestDetails.phone || '').trim(),
-    countryCode: guestDetails.countryCode ? String(guestDetails.countryCode) : undefined,
-    address1: guestDetails.address1 ? String(guestDetails.address1) : undefined,
-    address2: guestDetails.address2 ? String(guestDetails.address2) : undefined,
-    townOrCity: guestDetails.townOrCity ? String(guestDetails.townOrCity) : undefined,
-    state: guestDetails.state ? String(guestDetails.state) : undefined,
-    country: guestDetails.country ? String(guestDetails.country) : undefined,
-    pincode: guestDetails.pincode ? String(guestDetails.pincode) : undefined,
-    specialRequests: guestDetails.specialRequests ? String(guestDetails.specialRequests) : undefined
-});
+const extractSpecialRequests = (guest = {}, root = {}) => {
+    const val =
+        guest?.specialRequests ??
+        guest?.specialRequest ??
+        guest?.special_requests ??
+        guest?.special_request ??
+        root?.specialRequests ??
+        root?.specialRequest ??
+        root?.special_requests ??
+        root?.special_request;
+    return val && String(val).trim() ? String(val).trim() : undefined;
+};
+
+const buildGuestDetails = (guestDetails = {}, rootBody = {}) => {
+    const specialRequests = extractSpecialRequests(guestDetails, rootBody);
+    return {
+        firstName: String(guestDetails?.firstName || '').trim(),
+        lastName: String(guestDetails?.lastName || '').trim(),
+        email: String(guestDetails?.email || '').trim(),
+        mobileNumber: String(guestDetails?.mobileNumber || guestDetails?.phone || '').trim(),
+        countryCode: guestDetails?.countryCode ? String(guestDetails.countryCode) : undefined,
+        address1: guestDetails?.address1 ? String(guestDetails.address1) : undefined,
+        address2: guestDetails?.address2 ? String(guestDetails.address2) : undefined,
+        townOrCity: guestDetails?.townOrCity ? String(guestDetails.townOrCity) : undefined,
+        state: guestDetails?.state ? String(guestDetails.state) : undefined,
+        country: guestDetails?.country ? String(guestDetails.country) : undefined,
+        pincode: guestDetails?.pincode ? String(guestDetails.pincode) : undefined,
+        specialRequests,
+        specialRequest: specialRequests
+    };
+};
 
 const createBookingFromCartItem = async (item, guestDetails, cartId) => {
     const cartOptions = cartId ? { excludeCartId: cartId } : {};
@@ -199,6 +216,8 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
         nightBreakdown,
         roomQuantity: bookedQuantity,
         guestDetails,
+        specialRequests: guestDetails.specialRequests,
+        specialRequest: guestDetails.specialRequests,
         cartId,
         subTotal,
         totalAmount: subTotal,
@@ -237,7 +256,7 @@ const createBookingFromCartItem = async (item, guestDetails, cartId) => {
 const createRoomBooking = async (req, res) => {
     try {
         const { cartId, guestDetails, roomId } = req.body;
-        const guest = buildGuestDetails(guestDetails);
+        const guest = buildGuestDetails(guestDetails, req.body);
 
         let bookings = [];
 

@@ -185,6 +185,12 @@ const bookingSchema = new mongoose.Schema({
         },
         required: true
     },
+    specialRequests: {
+        type: String
+    },
+    specialRequest: {
+        type: String
+    },
     cabinPricePerNight: {
         type: Number,
         required: false
@@ -329,7 +335,35 @@ bookingSchema.methods.getFormattedBooking = function() {
         checkOutDate: this.checkOutDate,
         adults: this.adults,
         children: this.children,
-        guestDetails: this.guestDetails,
+        guestDetails: this.guestDetails
+            ? {
+                  ...(this.guestDetails.toObject?.() || this.guestDetails),
+                  specialRequests:
+                      this.guestDetails.specialRequests ||
+                      this.guestDetails.specialRequest ||
+                      this.specialRequests ||
+                      this.specialRequest ||
+                      null,
+                  specialRequest:
+                      this.guestDetails.specialRequests ||
+                      this.guestDetails.specialRequest ||
+                      this.specialRequests ||
+                      this.specialRequest ||
+                      null
+              }
+            : null,
+        specialRequests:
+            this.specialRequests ||
+            this.specialRequest ||
+            this.guestDetails?.specialRequests ||
+            this.guestDetails?.specialRequest ||
+            null,
+        specialRequest:
+            this.specialRequests ||
+            this.specialRequest ||
+            this.guestDetails?.specialRequests ||
+            this.guestDetails?.specialRequest ||
+            null,
         cabinPricePerNight: this.cabinPricePerNight,
         promoCode: this.promoCode || null,
         promoCodeId: this.promoCodeId || null,
