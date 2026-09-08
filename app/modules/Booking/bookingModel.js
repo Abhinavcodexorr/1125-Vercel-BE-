@@ -296,9 +296,19 @@ bookingSchema.methods.getFormattedBooking = function() {
             ? Number(this.subTotal)
             : amountPaidRaw + discountRaw;
 
+    const stayTitle =
+        this.roomSnapshot?.title ||
+        (Array.isArray(this.cabins) && this.cabins[0]?.cabinName) ||
+        this.cabinId?.name ||
+        null;
+
     const formatted = {
         _id: this._id,
         bookingReference: this.bookingReference,
+        title: stayTitle,
+        roomTitle: stayTitle,
+        stayName: stayTitle,
+        name: stayTitle,
         cabinId: this.cabinId,
         roomId: this.roomId,
         roomSnapshot: this.roomSnapshot

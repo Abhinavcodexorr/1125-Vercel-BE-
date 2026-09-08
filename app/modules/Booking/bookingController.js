@@ -1348,10 +1348,25 @@ const checkPaymentStatus = async (req, res) => {
     }
 };
 
-// Dashboard API — same summary as /statistics
+// Dashboard API — same summary as /statistics + recent bookings with formatted title
 const getDashboard = async (req, res) => {
     try {
         const dashboardData = await fetchBookingStatisticsSummary();
+
+        const recentBookingsDocs = await Booking.find({ isDeleted: false })
+            .sort({ createdAt: -1 })
+            .limit(10);
+        const packageTitleMap = buildPackageTitleMapFromBookingDocs(recentBookingsDocs);
+        const recentBookings = recentBookingsDocs.map((b) =>
+            formatAdminBookingRow(
+                b,
+                buildEnrichedPackageListForBooking(b, packageTitleMap)
+            )
+        );
+        dashboardData.recentBookings = recentBookings;
+        dashboardData.bookings = recentBookings;
+        dashboardData.stats = { ...dashboardData };
+        dashboardData.summary = { ...dashboardData };
 
         console.log('Dashboard statistics retrieved');
         return response.success200(res, 'Dashboard statistics retrieved successfully', dashboardData);
@@ -1438,6 +1453,7 @@ const expandBookingToCalendarEvents = (booking) => {
             end: booking.checkOutDate,
             room: {
                 id: booking.roomId,
+                title: roomName,
                 name: roomName,
                 slug: booking.roomSnapshot?.slug || null,
                 type: booking.roomSnapshot?.type || null,
@@ -1464,6 +1480,7 @@ const expandBookingToCalendarEvents = (booking) => {
                 currency: normalizeCurrencyCode(line.currency || booking.currency),
                 cabin: {
                     id: line.cabinId || null,
+                    title: cabinName,
                     name: cabinName,
                     cabinType: null
                 },

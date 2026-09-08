@@ -14,6 +14,8 @@ const {
     getRoomBlockedDateData,
     validateRoomQuantityUpdate,
     getRoomQuantity,
+    getQuantityOverrideMap,
+    getEffectiveQuantityForDate,
     computeNights,
     toDateOnly,
     formatDateKey
@@ -179,14 +181,88 @@ const createRoom = async (req, res) => {
 
 const getAllRoomsAdmin = async (req, res) => {
     try {
-        const { isActive } = req.query;
+        const { isActive, checkInDate, checkOutDate } = req.query;
         const filter = { isDeleted: false };
         if (isActive !== undefined) {
             filter.isActive = isActive === 'true';
         }
 
         const rooms = await Room.find(filter).sort({ createdAt: -1 }).lean();
-        const data = rooms.map((r) => Room.toApiShapeFromLean(r));
+        const roomIds = rooms.map((r) => r._id);
+        const allBookings = await getRoomBlockingBookingsByRoomIds(roomIds);
+
+        const bookingsByRoom = {};
+        allBookings.forEach((booking) => {
+            const key = String(booking.roomId);
+            if (!bookingsByRoom[key]) bookingsByRoom[key] = [];
+            bookingsByRoom[key].push(booking);
+        });
+
+        const stay = parseStayQuery({ checkInDate, checkOutDate });
+        const useStayDates = stay.hasStayDates && stay.validStayDates;
+
+        const today = toDateOnly(new Date());
+        const todayKey = formatDateKey(today);
+
+        const data = await Promise.all(
+            rooms.map(async (r) => {
+                const roomObj = Room.toApiShapeFromLean(r);
+                const bookings = bookingsByRoom[String(r._id)] || [];
+                const maxQty = getRoomQuantity(r);
+
+                let availableUnits = maxQty;
+                let bookedUnits = 0;
+
+                if (useStayDates) {
+                    const roomForStay = await withEffectiveBlockedDates(r);
+                    const stayEval = evaluateRoomStay(roomForStay, bookings, stay);
+                    availableUnits = stayEval.availableUnits ?? 0;
+                    bookedUnits = stayEval.bookedUnits ?? 0;
+                } else {
+                    const partnerBlocked = await getConflictPartnerBlockedDateDocs(r._id);
+                    const ownBlockedDates = r.blockedDates || [];
+                    const effectiveBlocked = [...ownBlockedDates, ...partnerBlocked];
+                    const { blockedDates: blockedKeyList } = getRoomBlockedDateData(effectiveBlocked);
+                    const blockedDateSet = new Set(blockedKeyList);
+
+                    const overrideMap = getQuantityOverrideMap(r);
+                    const dayQty = getEffectiveQuantityForDate(r, todayKey, overrideMap);
+
+                    const bookingCountByDate = buildBookingCountByDate(bookings);
+                    bookedUnits = bookingCountByDate.get(todayKey) || 0;
+                    const isBlockedToday = blockedDateSet.has(todayKey);
+
+                    availableUnits = isBlockedToday ? 0 : Math.max(dayQty - bookedUnits, 0);
+                }
+
+                const roomAvailabilityObj = {
+                    isAvailable: availableUnits > 0,
+                    availableUnits,
+                    availableRooms: availableUnits,
+                    availableCount: availableUnits,
+                    availableRoomCount: availableUnits,
+                    bookedUnits,
+                    bookedRooms: bookedUnits,
+                    totalQuantity: maxQty,
+                    totalRooms: maxQty,
+                    quantity: maxQty
+                };
+
+                return {
+                    ...roomObj,
+                    availableUnits,
+                    availableRooms: availableUnits,
+                    availableCount: availableUnits,
+                    availableRoomCount: availableUnits,
+                    bookedUnits,
+                    bookedRooms: bookedUnits,
+                    totalQuantity: maxQty,
+                    totalRooms: maxQty,
+                    quantity: maxQty,
+                    availability: roomAvailabilityObj
+                };
+            })
+        );
 
         return response.success200(res, msg.ROOMS_RETRIEVED, {
             total: data.length,
@@ -204,7 +280,52 @@ const getRoomByIdAdmin = async (req, res) => {
         if (!room) {
             return response.notFound404(res, msg.ROOM_NOT_FOUND);
         }
-        return response.success200(res, msg.ROOM_RETRIEVED, room.toApiShape());
+
+        const maxQty = getRoomQuantity(room);
+        const bookings = await getAllRoomBlockingBookings(room._id);
+        const partnerBlocked = await getConflictPartnerBlockedDateDocs(room._id);
+        const ownBlockedDates = room.blockedDates || [];
+        const effectiveBlocked = [...ownBlockedDates, ...partnerBlocked];
+        const { blockedDates: blockedKeyList } = getRoomBlockedDateData(effectiveBlocked);
+        const blockedDateSet = new Set(blockedKeyList);
+
+        const today = toDateOnly(new Date());
+        const todayKey = formatDateKey(today);
+
+        const overrideMap = getQuantityOverrideMap(room);
+        const dayQty = getEffectiveQuantityForDate(room, todayKey, overrideMap);
+
+        const bookingCountByDate = buildBookingCountByDate(bookings);
+        const bookedUnits = bookingCountByDate.get(todayKey) || 0;
+        const isBlockedToday = blockedDateSet.has(todayKey);
+        const availableUnits = isBlockedToday ? 0 : Math.max(dayQty - bookedUnits, 0);
+
+        const roomAvailabilityObj = {
+            isAvailable: availableUnits > 0,
+            availableUnits,
+            availableRooms: availableUnits,
+            availableCount: availableUnits,
+            availableRoomCount: availableUnits,
+            bookedUnits,
+            bookedRooms: bookedUnits,
+            totalQuantity: maxQty,
+            totalRooms: maxQty,
+            quantity: maxQty
+        };
+
+        return response.success200(res, msg.ROOM_RETRIEVED, {
+            ...room.toApiShape(),
+            availableUnits,
+            availableRooms: availableUnits,
+            availableCount: availableUnits,
+            availableRoomCount: availableUnits,
+            bookedUnits,
+            bookedRooms: bookedUnits,
+            totalQuantity: maxQty,
+            totalRooms: maxQty,
+            quantity: maxQty,
+            availability: roomAvailabilityObj
+        });
     } catch (error) {
         console.error('Get room admin error:', error.message);
         return response.serverError500(res, msg.GET_FAILED, error.message);
@@ -526,10 +647,20 @@ const checkRoomStayAvailability = async (req, res) => {
             roomId: room._id,
             slug: room.slug,
             name: room.title,
+            title: room.title,
             checkInDate: formatDateKey(stay.checkInDate),
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
             children: stay.children,
+            availableUnits: stayEval.availableUnits,
+            availableRooms: stayEval.availableUnits,
+            availableCount: stayEval.availableUnits,
+            availableRoomCount: stayEval.availableUnits,
+            bookedUnits: stayEval.bookedUnits,
+            bookedRooms: stayEval.bookedUnits,
+            totalQuantity: stayEval.quantity,
+            totalRooms: stayEval.quantity,
+            quantity: stayEval.quantity,
             pricePerNight: stayEval.avgPricePerNight ?? todayPrice,
             totalAmount: stayEval.subTotal,
             rateMeta: shapeRateMeta(clientTz, new Date(), tzCtx),
@@ -579,8 +710,30 @@ const getRoomAvailability = async (req, res) => {
             effectiveBlockedDates: [...ownBlockedDates, ...partnerBlocked]
         });
 
+        const today = toDateOnly(new Date());
+        const todayKey = formatDateKey(today);
+        const todayOccupancy = availability.occupancyByDate?.[todayKey];
+        const maxQty = getRoomQuantity(room);
+        const availableUnitsToday = todayOccupancy ? todayOccupancy.availableUnits : maxQty;
+        const bookedUnitsToday = todayOccupancy ? todayOccupancy.bookedCount : 0;
+
         return response.success200(res, msg.ROOM_AVAILABILITY_RETRIEVED, {
-            bookedDates: availability.bookedDates
+            room: availability.room,
+            totalQuantity: maxQty,
+            totalRooms: maxQty,
+            totalUnits: maxQty,
+            availableUnits: availableUnitsToday,
+            availableRooms: availableUnitsToday,
+            availableCount: availableUnitsToday,
+            availableRoomCount: availableUnitsToday,
+            bookedUnits: bookedUnitsToday,
+            bookedRooms: bookedUnitsToday,
+            bookedDates: availability.bookedDates,
+            partiallyBookedDates: availability.partiallyBookedDates,
+            availableDates: availability.availableDates,
+            occupancyByDate: availability.occupancyByDate,
+            quantityOverrides: availability.quantityOverrides,
+            summary: availability.summary
         });
     } catch (error) {
         console.error('Get room availability error:', error.message);

@@ -171,7 +171,7 @@ async function sendCancellationEmail(booking, packageDetailsMap = new Map(), opt
     );
 
     const c = booking.cabins?.[0];
-    const cabinName = c?.cabinName || booking.cabinId?.name || booking.roomSnapshot?.title || null;
+    const cabinName = booking.roomSnapshot?.title || booking.title || c?.cabinName || booking.cabinId?.name || null;
     const cabinCheckIn = c?.checkInDate || booking.checkInDate;
     const cabinCheckOut = c?.checkOutDate || booking.checkOutDate;
     const adults = c?.adults ?? booking.adults ?? 0;

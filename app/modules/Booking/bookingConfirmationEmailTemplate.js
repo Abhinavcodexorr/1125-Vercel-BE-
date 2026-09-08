@@ -79,6 +79,7 @@ const buildBookingConfirmationEmailHtml = ({ booking, roomName }) => {
     const room =
         roomName ||
         booking?.roomSnapshot?.title ||
+        booking?.title ||
         booking?.cabinId?.name ||
         booking?.cabins?.[0]?.cabinName ||
         'Room';

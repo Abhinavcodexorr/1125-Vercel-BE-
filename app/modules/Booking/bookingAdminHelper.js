@@ -3,6 +3,19 @@
  */
 
 const Booking = require('./bookingModel');
+const Room = require('../Rooms/roomModel');
+const {
+    getRoomQuantity,
+    getQuantityOverrideMap,
+    getEffectiveQuantityForDate,
+    buildBookingCountByDate,
+    getRoomBlockedDateData,
+    getRoomBlockingBookingsByRoomIds,
+    collectBookingsForRoomAvailability,
+    getConflictPartnerBlockedDateDocs,
+    toDateOnly,
+    formatDateKey
+} = require('../Rooms/roomAvailabilityHelper');
 
 const formatGuest = (guest = {}) => {
     const firstName = guest.firstName || '';
@@ -36,6 +49,7 @@ const resolveStayName = (booking) => {
     if (Array.isArray(booking.cabins) && booking.cabins[0]?.cabinName) {
         return booking.cabins[0].cabinName;
     }
+    if (booking.cabinId?.name) return booking.cabinId.name;
     return null;
 };
 
@@ -61,7 +75,7 @@ const buildFilterMessage = (filterKey, total) => {
 const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
     const base = bookingDoc.getFormattedBooking();
     const bookingType = resolveBookingType(bookingDoc);
-    const stayName = resolveStayName(bookingDoc);
+    const stayTitle = resolveStayName(bookingDoc);
     const specialRequests =
         base.specialRequests ||
         base.specialRequest ||
@@ -77,17 +91,22 @@ const formatAdminBookingRow = (bookingDoc, packageLines = null) => {
         _id: base._id,
         bookingReference: base.bookingReference,
         bookingType,
-        stayName,
+        title: stayTitle,
+        roomTitle: stayTitle,
+        stayName: stayTitle,
+        name: stayTitle,
         room: bookingDoc.roomId
             ? {
                   id: base.roomId,
-                  name: bookingDoc.roomSnapshot?.title || stayName,
+                  title: stayTitle,
+                  name: stayTitle,
                   slug: bookingDoc.roomSnapshot?.slug || null,
                   type: bookingDoc.roomSnapshot?.type || null,
                   quantity: base.roomQuantity || 1
               }
             : null,
         cabinId: base.cabinId || null,
+        cabinName: stayTitle,
         cabins: Array.isArray(bookingDoc.cabins) ? bookingDoc.cabins : [],
         checkInDate: base.checkInDate,
         checkOutDate: base.checkOutDate,
@@ -203,12 +222,68 @@ const fetchBookingStatisticsSummary = async () => {
     const cancelledBookings = stats?.cancelledBookings || 0;
     const totalRevenue = Number((stats?.totalRevenue || 0).toFixed(2));
 
+    // Live room availability counts for admin dashboard
+    let totalRooms = 0;
+    let availableRooms = 0;
+    let occupiedRooms = 0;
+
+    try {
+        const activeRooms = await Room.find({ isDeleted: false, isActive: true }).lean();
+        const roomIds = activeRooms.map((r) => r._id);
+        const allBookings = await getRoomBlockingBookingsByRoomIds(roomIds);
+        const bookingsByRoom = {};
+        allBookings.forEach((b) => {
+            const key = String(b.roomId);
+            if (!bookingsByRoom[key]) bookingsByRoom[key] = [];
+            bookingsByRoom[key].push(b);
+        });
+
+        const today = toDateOnly(new Date());
+        const todayKey = formatDateKey(today);
+
+        for (const r of activeRooms) {
+            const maxQty = getRoomQuantity(r);
+            totalRooms += maxQty;
+
+            const bookings = collectBookingsForRoomAvailability(r._id, bookingsByRoom);
+            const bookingCountByDate = buildBookingCountByDate(bookings);
+            const bookedToday = bookingCountByDate.get(todayKey) || 0;
+            occupiedRooms += bookedToday;
+
+            const overrideMap = getQuantityOverrideMap(r);
+            const dayQty = getEffectiveQuantityForDate(r, todayKey, overrideMap);
+
+            const partnerBlocked = await getConflictPartnerBlockedDateDocs(r._id);
+            const effectiveBlocked = [...(r.blockedDates || []), ...partnerBlocked];
+            const { blockedDates: blockedKeyList } = getRoomBlockedDateData(effectiveBlocked);
+            const isBlockedToday = blockedKeyList.includes(todayKey);
+
+            const availToday = isBlockedToday ? 0 : Math.max(dayQty - bookedToday, 0);
+            availableRooms += availToday;
+        }
+    } catch (roomStatsError) {
+        console.error('Failed to compute room availability stats:', roomStatsError.message);
+    }
+
     return {
         totalBookings,
         pendingBookings,
         completedBookings,
         cancelledBookings,
         totalRevenue,
+        // Live room counts for admin dashboard
+        totalRooms,
+        totalUnits: totalRooms,
+        totalQuantity: totalRooms,
+        availableRooms,
+        availableUnits: availableRooms,
+        availableCount: availableRooms,
+        availableRoomCount: availableRooms,
+        occupiedRooms,
+        occupiedUnits: occupiedRooms,
+        bookedRooms: occupiedRooms,
+        bookedUnits: occupiedRooms,
+        occupancyRate: totalRooms > 0 ? Number(((occupiedRooms / totalRooms) * 100).toFixed(1)) : 0,
         // Extra fields used by FE mapper / older clients
         confirmedBookings: stats?.confirmedBookings || completedBookings,
         averageBookingValue:

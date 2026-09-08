@@ -75,7 +75,13 @@ const buildBookingInProgressEmailHtml = ({ booking, roomName, submittedAt }) => 
         guest?.specialRequests ||
         guest?.specialRequest ||
         null;
-    const room = roomName || booking?.roomSnapshot?.title || booking?.cabinId?.name || 'Room';
+    const room =
+        roomName ||
+        booking?.roomSnapshot?.title ||
+        booking?.title ||
+        booking?.cabins?.[0]?.cabinName ||
+        booking?.cabinId?.name ||
+        'Room';
     const dateLabel = submittedAt
         ? new Date(submittedAt).toLocaleString(undefined, {
               year: 'numeric',

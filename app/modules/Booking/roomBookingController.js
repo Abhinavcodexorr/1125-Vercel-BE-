@@ -49,17 +49,20 @@ const buildEmailBookingPayload = (bookings) => {
     plain.bookingReference = primary.bookingReference;
     // Sum units across line items so confirmation / in-progress emails stay accurate
     plain.roomQuantity = bookings.reduce((sum, b) => sum + resolveBookingUnitCount(b), 0);
+
+    // Show only the title (unique title list without multipliers or quantity suffixes)
+    const titles = [
+        ...new Set(
+            bookings
+                .map((b) => b.roomSnapshot?.title || b.cabins?.[0]?.cabinName || b.cabinId?.name || null)
+                .filter(Boolean)
+        )
+    ];
+    const roomTitle = titles.join(', ') || 'Room';
+
     return {
         payload: plain,
-        roomName:
-            bookings
-                .map((b) => {
-                    const title = b.roomSnapshot?.title || 'Room';
-                    const qty = resolveBookingUnitCount(b);
-                    return bookings.length > 1 && qty > 1 ? `${title} × ${qty}` : title;
-                })
-                .filter(Boolean)
-                .join(', ') || 'Room'
+        roomName: roomTitle
     };
 };
 

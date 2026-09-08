@@ -11,7 +11,10 @@ const {
     isMultiQuantityRoom,
     formatDateKey,
     computeNights,
-    toDateOnly
+    toDateOnly,
+    buildBookingCountByDate,
+    getQuantityOverrideMap,
+    getEffectiveQuantityForDate
 } = require('./roomAvailabilityHelper');
 const {
     CURRENCY_SYMBOLS,
@@ -126,7 +129,25 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
     };
 
     if (!stay.hasStayDates) {
-        return result;
+        const today = toDateOnly(new Date());
+        const todayKey = formatDateKey(today);
+        const overrideMap = getQuantityOverrideMap(room);
+        const dayQty = getEffectiveQuantityForDate(room, todayKey, overrideMap);
+        const bookingCountByDate = buildBookingCountByDate(bookings);
+        const bookedToday = bookingCountByDate.get(todayKey) || 0;
+        const { blockedDates: blockedKeyList } = getRoomBlockedDateData(room.blockedDates || []);
+        const isBlockedToday = blockedKeyList.includes(todayKey);
+        const availableToday = isBlockedToday ? 0 : Math.max(dayQty - bookedToday, 0);
+
+        return {
+            ...result,
+            quantity: dayQty,
+            totalQuantity: quantity,
+            totalRooms: quantity,
+            availableUnits: availableToday,
+            bookedUnits: bookedToday,
+            isAvailable: availableToday > 0
+        };
     }
 
     if (!stay.validStayDates) {
@@ -202,8 +223,14 @@ const evaluateRoomStay = (room, bookings, stay, options = {}) => {
 const shapeStayEvalForWebsite = (stayEval) => ({
     isAvailable: stayEval.isAvailable,
     quantity: stayEval.quantity,
+    totalQuantity: stayEval.quantity,
+    totalRooms: stayEval.quantity,
     availableUnits: stayEval.availableUnits,
+    availableRooms: stayEval.availableUnits,
+    availableCount: stayEval.availableUnits,
+    availableRoomCount: stayEval.availableUnits,
     bookedUnits: stayEval.bookedUnits,
+    bookedRooms: stayEval.bookedUnits,
     requestedQuantity: stayEval.requestedQuantity,
     maxGuestsPerChalet: stayEval.maxGuestsPerChalet ?? null,
     maxTotalGuests: stayEval.maxTotalGuests ?? null,
@@ -223,14 +250,42 @@ const shapeStayEvalForWebsite = (stayEval) => ({
 const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
     const shaped = shapeRoomBaseForWebsite(room);
     if (!stay.hasStayDates) {
+        if (stayEval && stayEval.availableUnits !== undefined) {
+            shaped.availableUnits = stayEval.availableUnits;
+            shaped.availableRooms = stayEval.availableUnits;
+            shaped.availableCount = stayEval.availableUnits;
+            shaped.availableRoomCount = stayEval.availableUnits;
+            shaped.bookedUnits = stayEval.bookedUnits ?? 0;
+            shaped.bookedRooms = stayEval.bookedUnits ?? 0;
+            shaped.availability = {
+                isAvailable: stayEval.isAvailable ?? (stayEval.availableUnits > 0),
+                availableUnits: stayEval.availableUnits,
+                availableRooms: stayEval.availableUnits,
+                availableCount: stayEval.availableUnits,
+                availableRoomCount: stayEval.availableUnits,
+                bookedUnits: stayEval.bookedUnits ?? 0,
+                bookedRooms: stayEval.bookedUnits ?? 0,
+                quantity: shaped.quantity,
+                totalQuantity: shaped.totalQuantity,
+                totalRooms: shaped.totalRooms
+            };
+        }
         return shaped;
     }
 
     if (!stay.validStayDates) {
         return {
             ...shaped,
+            availableUnits: 0,
+            availableRooms: 0,
+            availableCount: 0,
+            availableRoomCount: 0,
             availability: {
                 isAvailable: false,
+                availableUnits: 0,
+                availableRooms: 0,
+                availableCount: 0,
+                availableRoomCount: 0,
                 unavailableReason: 'checkOutDate must be after checkInDate'
             }
         };
@@ -238,11 +293,22 @@ const attachStayAvailabilityToRoom = (room, stay, stayEval) => {
 
     const availability = shapeStayEvalForWebsite(stayEval);
     const showQuantityPicker = isMultiQuantityRoom(room);
+    const availCount = availability.availableUnits;
 
     return {
         ...shaped,
+        availableUnits: availCount,
+        availableRooms: availCount,
+        availableCount: availCount,
+        availableRoomCount: availCount,
+        bookedUnits: availability.bookedUnits,
+        bookedRooms: availability.bookedUnits,
         availability: {
             ...availability,
+            availableUnits: availCount,
+            availableRooms: availCount,
+            availableCount: availCount,
+            availableRoomCount: availCount,
             checkInDate: formatDateKey(stay.checkInDate),
             checkOutDate: formatDateKey(stay.checkOutDate),
             adults: stay.adults,
@@ -260,6 +326,7 @@ const shapeRoomBaseForWebsite = (room, timezone) => {
     const wePrice = getRoomWePrice(room);
     const { amount: todayPrice, dayType, tz, localDay } = resolveRoomPriceForDay(room, timezone);
     const money = shapeMoneyFields(todayPrice, room.currency);
+    const maxQty = getRoomQuantity(room);
 
     return {
         _id: room._id,
@@ -280,7 +347,15 @@ const shapeRoomBaseForWebsite = (room, timezone) => {
         price: todayPrice,
         ...money,
         guests: room.guests,
-        quantity: getRoomQuantity(room),
+        quantity: maxQty,
+        totalQuantity: maxQty,
+        totalRooms: maxQty,
+        availableUnits: maxQty,
+        availableRooms: maxQty,
+        availableCount: maxQty,
+        availableRoomCount: maxQty,
+        bookedUnits: 0,
+        bookedRooms: 0,
         adultCapacity: room.guests,
         childCapacity: 0,
         amenities: room.amenities || [],
