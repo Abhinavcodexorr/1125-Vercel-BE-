@@ -180,6 +180,7 @@ const connectDB = async () => {
         }
 
         const superAdminController = require('./app/modules/SuperAdmin/superAdminController');
+app.use('/api/v1/gallery', require('./app/modules/Gallery/galleryController'));
         await superAdminController.createDefaultSuperAdmin();
     }
 
