@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const express = require('express');
 const router = express.Router();
 const path = require('path');
@@ -84,7 +85,7 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const item = await Gallery.findOne({ _id: req.params.id, isDeleted: false });
+    const item = await Gallery.findOne(mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id, isDeleted: false } : { id: req.params.id, isDeleted: false });
     if (!item) {
       return res.status(404).json({ success: false, message: 'Gallery item not found' });
     }
@@ -185,7 +186,7 @@ router.put('/:id', async (req, res) => {
     delete updates.id;
 
     const updated = await Gallery.findOneAndUpdate(
-      { _id: req.params.id, isDeleted: false },
+      mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id, isDeleted: false } : { id: req.params.id, isDeleted: false },
       { $set: updates },
       { new: true }
     );
@@ -215,7 +216,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const deleted = await Gallery.findOneAndUpdate(
-      { _id: req.params.id },
+      mongoose.Types.ObjectId.isValid(req.params.id) ? { _id: req.params.id } : { id: req.params.id },
       { $set: { isDeleted: true, isActive: false } },
       { new: true }
     );
